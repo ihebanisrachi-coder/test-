@@ -1,0 +1,15 @@
+{
+ "now": 1790896005340,
+ "poolHashrate": 33528423586955232,
+ "networkDiff": 224801580752236640,
+ "networkSpeed": 86938970459785400,
+ "avgBlockReward": "10.94843",
+ "coinSymbol": "QUAI",
+ "coinAlgorithm": "SHA-256",
+ "coinReward": 10.9484,
+ "coinPoolFee": 2,
+ "coinBlocktime": 4.82,
+ "coinPriceBtc": "0.00000012",
+ "coinPriceUsd": "0.01026545",
+ "reward_type": "PPLNS"
+}

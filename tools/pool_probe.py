@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show what the Kryptex and K1Pool public APIs answer, to build a profitability comparison.
+"""Show what the Kryptex, K1Pool and CoinGecko public APIs answer (profitability comparison).
 
 Read-only: public GET requests, no account, no credentials. Standard library only.
 
@@ -18,7 +18,8 @@ import urllib.request
 KRYPTEX = "https://pool.kryptex.com"
 K1POOL = "https://k1pool.com"
 KRYPTEX_COINS = ("btc", "bsv", "quai-sha256")
-K1POOL_POOLS = ("quaisha256",)
+K1POOL_POOLS = ("quaisha256", "btc")
+COINGECKO = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,bitcoin-cash-sv,quai-network&vs_currencies=usd"
 
 MAX_ITEMS = 3
 MAX_STRING = 120
@@ -47,9 +48,11 @@ def urls() -> dict[str, str]:
         found[f"kryptex {coin} pool info"] = f"{KRYPTEX}/{coin}/api/v1/pool/info"
         found[f"kryptex {coin} coin info"] = f"{KRYPTEX}/api/v1/coin/{coin}/info"
         found[f"kryptex {coin} network stats"] = f"{KRYPTEX}/api/v1/net/stats/{coin}"
+        found[f"kryptex {coin} price chart"] = f"{KRYPTEX}/api/v1/coin/{coin}/price/chart"
     for pool in K1POOL_POOLS:
         found[f"k1pool {pool} stats"] = f"{K1POOL}/api/stats/{pool}"
         found[f"k1pool {pool} dashboard"] = f"{K1POOL}/api/dashboard/{pool}"
+    found["coingecko prices"] = COINGECKO
     return found
 
 

@@ -1,0 +1,10 @@
+{
+ "ticker": "btc",
+ "fee": 0.03,
+ "block_time": 600,
+ "block_reward": null,
+ "name": "Bitcoin",
+ "algo": "SHA256",
+ "net_hashrate": 921429592951940700000,
+ "estimated_profit_day": 4.785368009328963e-19
+}

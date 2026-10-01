@@ -36,3 +36,7 @@ def test_urls_cover_the_three_coins_on_kryptex_and_quai_on_k1pool() -> None:
     assert urls["kryptex quai-sha256 coin info"].endswith("/api/v1/coin/quai-sha256/info")
     assert urls["k1pool quaisha256 stats"] == "https://k1pool.com/api/stats/quaisha256"
     assert urls["k1pool quaisha256 dashboard"] == "https://k1pool.com/api/dashboard/quaisha256"
+    # Price sources the profitability package relies on.
+    assert urls["kryptex bsv price chart"].endswith("/api/v1/coin/bsv/price/chart")
+    assert urls["k1pool btc stats"] == "https://k1pool.com/api/stats/btc"
+    assert "ids=bitcoin,bitcoin-cash-sv" in urls["coingecko prices"]

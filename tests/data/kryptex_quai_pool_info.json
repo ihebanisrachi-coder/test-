@@ -1,0 +1,10 @@
+{
+ "ticker": "quai",
+ "fee": 0.01,
+ "block_time": 5,
+ "block_reward": null,
+ "name": "Quai SHA256",
+ "algo": "SHA256",
+ "net_hashrate": 84564806046180843,
+ "estimated_profit_day": null
+}

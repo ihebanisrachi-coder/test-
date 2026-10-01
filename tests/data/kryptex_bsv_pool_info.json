@@ -1,0 +1,10 @@
+{
+ "ticker": "bsv",
+ "fee": 0.03,
+ "block_time": 600,
+ "block_reward": 3.12518682,
+ "name": "Bitcoin SV",
+ "algo": "SHA256",
+ "net_hashrate": 223698954120854700,
+ "estimated_profit_day": 1.992204470122197e-15
+}
