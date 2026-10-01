@@ -40,3 +40,30 @@ def test_urls_cover_the_three_coins_on_kryptex_and_quai_on_k1pool() -> None:
     assert urls["kryptex bsv price chart"].endswith("/api/v1/coin/bsv/price/chart")
     assert urls["k1pool btc stats"] == "https://k1pool.com/api/stats/btc"
     assert "ids=bitcoin,bitcoin-cash-sv" in urls["coingecko prices"]
+
+
+INDEX = {
+    "btc": {"algo": "SHA256", "ticker": "btc"},
+    "bch": {"algo": "SHA256", "ticker": "bch"},
+    "fb": {"algo": "SHA256", "ticker": "fb"},
+    "quai-sha256": {"algo": "SHA256", "ticker": "quai"},
+    "quai-scrypt": {"algo": "Scrypt", "ticker": "quai"},
+    "xtm-sha3x": {"algo": "SHA-3X", "ticker": "xtm"},
+    "kas": {"algo": "kHeavyHash", "ticker": "kas"},
+}
+
+
+def test_sha256_coins_are_found_from_the_index_and_sha3x_is_not_one_of_them() -> None:
+    assert probe.sha256_coins(INDEX) == ["btc", "bch", "fb", "quai-sha256"]
+    assert probe.sha256_coins("not an index") == []
+
+
+def test_extra_urls_only_add_coins_not_probed_in_full() -> None:
+    extra = probe.extra_urls(INDEX)
+
+    assert extra == {
+        "kryptex bch pool info": "https://pool.kryptex.com/bch/api/v1/pool/info",
+        "kryptex bch price chart": "https://pool.kryptex.com/api/v1/coin/bch/price/chart",
+        "kryptex fb pool info": "https://pool.kryptex.com/fb/api/v1/pool/info",
+        "kryptex fb price chart": "https://pool.kryptex.com/api/v1/coin/fb/price/chart",
+    }

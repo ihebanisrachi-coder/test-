@@ -56,6 +56,31 @@ def urls() -> dict[str, str]:
     return found
 
 
+def normalize_algo(algo) -> str:
+    return str(algo or "").upper().replace("-", "").replace(" ", "")
+
+
+def sha256_coins(index) -> list[str]:
+    """Slugs of the SHA-256 pools listed by Kryptex's /api/v1/index."""
+    if not isinstance(index, dict):
+        return []
+    return [
+        slug
+        for slug, pool in index.items()
+        if isinstance(pool, dict) and normalize_algo(pool.get("algo")) == "SHA256"
+    ]
+
+
+def extra_urls(index) -> dict[str, str]:
+    """Pool info and price chart of every SHA-256 coin not already probed in full."""
+    found = {}
+    for coin in sha256_coins(index):
+        if coin not in KRYPTEX_COINS:
+            found[f"kryptex {coin} pool info"] = f"{KRYPTEX}/{coin}/api/v1/pool/info"
+            found[f"kryptex {coin} price chart"] = f"{KRYPTEX}/api/v1/coin/{coin}/price/chart"
+    return found
+
+
 def fetch(url: str):
     req = urllib.request.Request(
         url, headers={"User-Agent": "Mozilla/5.0 (vnish-ha pool probe)", "Accept": "application/json"}
@@ -66,9 +91,15 @@ def fetch(url: str):
 
 def main() -> int:
     report = {}
-    for label, url in urls().items():
+    targets = urls()
+    while targets:
+        label = next(iter(targets))
+        url = targets.pop(label)
         try:
-            report[label] = {"url": url, "data": shorten(fetch(url))}
+            raw = fetch(url)
+            report[label] = {"url": url, "data": shorten(raw)}
+            if label == "kryptex index":  # then also probe the other SHA-256 coins it lists
+                targets.update(extra_urls(raw))
         except (urllib.error.URLError, OSError, ValueError) as err:
             report[label] = {"url": url, "error": str(err)}
     json.dump(report, sys.stdout, indent=1, ensure_ascii=False)
