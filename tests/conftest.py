@@ -11,7 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.vnish.const import DOMAIN
 
-from .fake_vnish import PRESETS, SETTINGS, SUMMARY
+from .fake_vnish import PRESETS, RPC_POOLS, SETTINGS, SUMMARY
 
 HOST = "192.168.1.50"
 
@@ -34,6 +34,7 @@ def client():
         mock.settings.return_value = copy.deepcopy(SETTINGS)
         mock.presets.return_value = copy.deepcopy(PRESETS)
         mock.rpc_summary.return_value = {"GHS 5s": 110500.0}
+        mock.rpc_pools.return_value = copy.deepcopy(RPC_POOLS)
         yield mock
 
 

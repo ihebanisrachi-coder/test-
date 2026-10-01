@@ -109,24 +109,34 @@ def test_identity_helpers() -> None:
     assert firmware_version({"miner": {"miner_type": "Antminer S19"}}) is None
 
 
-def test_pool_numbers_follow_stable_order_not_miner_priority() -> None:
-    data = VnishData(
+def _pool_data(active_url: str) -> VnishData:
+    return VnishData(
         summary={},
         settings={
             "miner": {
                 "pools": [
-                    {"url": "b:1", "user": "u"},  # primary on the miner
-                    {"url": "", "user": ""},
                     {"url": "a:1", "user": "u"},
-                    {"url": "c:1", "user": "u"},  # not in the saved order yet
+                    {"url": "", "user": ""},
+                    {"url": "b:1", "user": "u"},
                 ]
             }
         },
-        pool_order=[("a:1", "u"), ("b:1", "u")],
+        rpc_pools=[
+            {"POOL": 0, "URL": "stratum+tcp://A:1/", "User": "u", "Stratum Active": active_url == "a:1"},
+            {"POOL": 1, "URL": "stratum+tcp://b:1", "User": "u", "Stratum Active": active_url == "b:1"},
+        ],
     )
 
-    assert [p["url"] for p in data.pools] == ["a:1", "b:1", "c:1"]
-    assert data.pool_labels == ["1", "2", "3"]
-    assert data.active_pool == "2"
-    assert data.pool_by_label("3")["url"] == "c:1"
+
+def test_pool_numbers_follow_the_settings_table() -> None:
+    data = _pool_data("a:1")
+
+    assert [p["url"] for p in data.pools] == ["a:1", "b:1"]
+    assert data.pool_labels == ["1", "2"]
+    assert data.pool_by_label("2")["url"] == "b:1"
     assert data.pool_by_label("9") is None
+
+
+@pytest.mark.parametrize(("active", "label"), [("a:1", "1"), ("b:1", "2"), ("", None)])
+def test_active_pool_comes_from_the_rpc(active: str, label: str | None) -> None:
+    assert _pool_data(active).active_pool == label

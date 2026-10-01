@@ -10,6 +10,8 @@ from typing import Any
 
 import aiohttp
 
+from .models import find_rpc_pool
+
 _LOGGER = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -142,14 +144,17 @@ class VnishClient:
             data = data.get("presets", [])
         return [p for p in data if isinstance(p, dict)] if isinstance(data, list) else []
 
-    async def rpc_summary(self) -> dict[str, Any]:
-        """CGMiner ``summary`` command (port 4028); its hashrate is in GH/s."""
+    async def _rpc(self, command: str, parameter: Any = None) -> dict[str, Any]:
+        """One CGMiner API call (port 4028); the miner closes the socket after replying."""
+        payload: dict[str, Any] = {"command": command}
+        if parameter is not None:
+            payload["parameter"] = str(parameter)
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(self._host, self._rpc_port), RPC_TIMEOUT
             )
             try:
-                writer.write(json.dumps({"command": "summary"}).encode())
+                writer.write(json.dumps(payload).encode())
                 await writer.drain()
                 raw = await asyncio.wait_for(reader.read(-1), RPC_TIMEOUT)
             finally:
@@ -159,9 +164,24 @@ class VnishClient:
         except (OSError, TimeoutError) as err:
             raise VnishConnectionError(f"RPC {self._host}: {err}") from err
         try:
-            return json.loads(raw.rstrip(b"\x00").decode())["SUMMARY"][0]
-        except (ValueError, KeyError, IndexError, TypeError) as err:
+            return json.loads(raw.rstrip(b"\x00").decode())
+        except ValueError as err:
+            raise VnishApiError(f"Unexpected RPC {command} answer") from err
+
+    async def rpc_summary(self) -> dict[str, Any]:
+        """CGMiner ``summary`` command; its hashrate is in GH/s."""
+        try:
+            return (await self._rpc("summary"))["SUMMARY"][0]
+        except (KeyError, IndexError, TypeError) as err:
             raise VnishApiError("Unexpected RPC summary answer") from err
+
+    async def rpc_pools(self) -> list[dict[str, Any]]:
+        """CGMiner ``pools`` command: URL, User, Status, ``Stratum Active``."""
+        try:
+            pools = (await self._rpc("pools"))["POOLS"]
+        except (KeyError, TypeError) as err:
+            raise VnishApiError("Unexpected RPC pools answer") from err
+        return [p for p in pools if isinstance(p, dict)]
 
     # --- commands -----------------------------------------------------------
 
@@ -212,19 +232,24 @@ class VnishClient:
         if applied != preset:
             raise VnishApiError(f"Preset {preset!r} was not applied (still {applied!r})")
 
-    async def set_active_pool(self, url: str, user: str) -> None:
-        """Make a configured pool the primary one (the others stay as failovers)."""
-        pools = await self._miner_settings("pools")
-        chosen = next(
-            (p for p in pools if p.get("url") == url and p.get("user") == user), None
-        )
-        if chosen is None:
-            raise VnishApiError(f"Pool {url!r} is not configured on the miner")
-        if pools[0] is chosen:
-            return
-        await self._apply_miner_settings(
-            {"pools": [chosen, *(p for p in pools if p is not chosen)]}, f"pool {url}"
-        )
-        first = (await self._miner_settings("pools"))[0]
-        if (first.get("url"), first.get("user")) != (url, user):
-            raise VnishApiError(f"Pool {url!r} was not applied")
+    async def switch_pool(self, url: str, user: str) -> None:
+        """Connect to one of the configured pools right now.
+
+        Uses the CGMiner ``switchpool`` command: only the active pool changes, the
+        pool table is not rewritten and mining is not restarted. The miner goes
+        back to its configured primary pool after a restart or reboot.
+        """
+        rpc_pool = find_rpc_pool({"url": url, "user": user}, await self.rpc_pools())
+        if rpc_pool is None or rpc_pool.get("POOL") is None:
+            raise VnishApiError(f"Pool {url!r} is not known to the miner")
+
+        reply = await self._rpc("switchpool", rpc_pool["POOL"])
+        try:
+            status = reply["STATUS"][0]
+        except (KeyError, IndexError, TypeError) as err:
+            raise VnishApiError("Unexpected RPC switchpool answer") from err
+        if status.get("STATUS") not in ("S", "I"):
+            raise VnishApiError(
+                f"switchpool refused: {status.get('Msg', 'no reason given')} "
+                "(the RPC API may be read-only)"
+            )

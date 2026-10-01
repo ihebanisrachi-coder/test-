@@ -94,5 +94,5 @@ class VnishPoolButton(VnishEntity, ButtonEntity):
         if pool is None:
             raise HomeAssistantError(f"Pool {self._label!r} is no longer configured")
         await self._command(
-            self.coordinator.client.set_active_pool(pool["url"], pool.get("user", ""))
+            self.coordinator.client.switch_pool(pool["url"], pool.get("user", ""))
         )

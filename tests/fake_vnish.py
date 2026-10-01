@@ -50,6 +50,14 @@ PRESETS: list[dict[str, Any]] = [
 ]
 
 
+RPC_POOLS: list[dict[str, Any]] = [
+    {"POOL": 0, "URL": "stratum+tcp://pool.example:3333", "User": "wallet.worker",
+     "Status": "Alive", "Stratum Active": True},
+    {"POOL": 1, "URL": "stratum+tcp://backup.example:3333", "User": "wallet.worker",
+     "Status": "Alive", "Stratum Active": False},
+]
+
+
 class FakeVnish:
     def __init__(self, password: str = "admin") -> None:
         self.password = password
@@ -62,6 +70,9 @@ class FakeVnish:
         self.settings_reply: dict[str, Any] = {"restart_required": False, "reboot_required": False}
         self.apply_settings = True
         self.rpc_ghs = 110500.0
+        self.rpc_pools = copy.deepcopy(RPC_POOLS)
+        self.rpc_write_allowed = True
+        self.rpc_commands: list[tuple[str, str | None]] = []
         self.app = web.Application()
         self.app.add_routes(
             [
@@ -125,8 +136,19 @@ class FakeVnish:
         return web.json_response({"success": True})
 
     async def rpc(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        await reader.read(1024)
-        payload = {"STATUS": [{"STATUS": "S"}], "SUMMARY": [{"GHS 5s": self.rpc_ghs}], "id": 1}
-        writer.write(json.dumps(payload).encode() + b"\x00")
+        request = json.loads((await reader.read(1024)).decode())
+        command, parameter = request["command"], request.get("parameter")
+        self.rpc_commands.append((command, parameter))
+        if command == "summary":
+            reply: dict[str, Any] = {"STATUS": [{"STATUS": "S"}], "SUMMARY": [{"GHS 5s": self.rpc_ghs}]}
+        elif command == "pools":
+            reply = {"STATUS": [{"STATUS": "S"}], "POOLS": self.rpc_pools}
+        elif command == "switchpool" and self.rpc_write_allowed:
+            for pool in self.rpc_pools:
+                pool["Stratum Active"] = str(pool["POOL"]) == parameter
+            reply = {"STATUS": [{"STATUS": "S", "Msg": f"Switching to pool {parameter}"}]}
+        else:
+            reply = {"STATUS": [{"STATUS": "E", "Msg": f"Access denied to '{command}' command"}]}
+        writer.write(json.dumps(reply).encode() + b"\x00")
         await writer.drain()
         writer.close()

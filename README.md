@@ -24,8 +24,8 @@ Prérequis : Home Assistant 2025.1 ou plus récent (testé avec 2026.2), mineur 
 |---|---|
 | `switch.<mineur>_mining` | Arrête (`mining/stop`) / relance (`mining/resume`, puis `mining/start` si refusé) le minage |
 | `select.<mineur>_preset` | Preset d'autotune actif, donc la puissance. Les noms valides sont les options du sélecteur ; leur libellé (« 3250 watt ~ 110 TH ») est dans les attributs |
-| `select.<mineur>_active_pool` | Pool principal : options `1`, `2`, `3` (l'URL de chaque numéro est dans les attributs, jamais les identifiants). Les numéros suivent l'ordre des pools à l'installation et ne bougent pas quand le mineur réordonne sa liste ; les autres pools restent en secours |
-| `button.<mineur>_use_pool_N` | Un bouton par pool configuré (N = 1, 2, 3) : l'appuyer le place en tête, comme le sélecteur |
+| `select.<mineur>_active_pool` | Pool **actif** : options `1`, `2`, `3` (= position du pool dans la table de pools de Vnish ; l'URL de chaque numéro est dans les attributs, jamais les identifiants). Choisir un numéro connecte le mineur à ce pool tout de suite |
+| `button.<mineur>_use_pool_N` | Un bouton par pool configuré (N = 1, 2, 3), même effet que le sélecteur |
 | `button.<mineur>_reboot` | Redémarre le mineur |
 | `button.<mineur>_restart_mining` | Relance uniquement le minage |
 | `sensor.<mineur>_state` | État Vnish (`mining`, `stopped`, `failure`…) |
@@ -37,8 +37,18 @@ Prérequis : Home Assistant 2025.1 ou plus récent (testé avec 2026.2), mineur 
 
 `<mineur>` est le nom d'hôte du mineur. Les données sont relevées toutes les 30 s.
 
-Choisir un pool le place en tête de la liste du mineur ; pour en ajouter un, configurez-le d'abord dans l'interface Vnish. Changer de preset ou de pool relance le minage si le mineur le demande (`restart_required`) ; l'intégration relit
+Changer de preset relance le minage si le mineur le demande (`restart_required`) ; l'intégration relit
 ensuite le réglage pour confirmer qu'il a été pris en compte, et signale une erreur sinon.
+
+### Changement de pool
+
+Le changement de pool utilise la commande RPC standard CGMiner `switchpool` (port 4028) : seul le
+pool **actif** change. La table de pools de Vnish n'est pas modifiée et le minage n'est pas relancé.
+Conséquences : le changement n'est pas persistant (après un redémarrage du minage ou du mineur, il
+revient à son pool principal configuré) ; pour ajouter ou réordonner des pools, passez par l'interface
+Vnish. Si HA affiche « switchpool refused », l'API RPC de votre mineur n'accepte probablement que la
+lecture. Le pool actif affiché vient de la commande RPC `pools` (`Stratum Active`) ; il est
+« inconnu » si le port 4028 n'est pas joignable.
 
 ## Automatisations
 
@@ -71,7 +81,7 @@ python3 tools/vnish_probe.py 192.168.1.50 --password admin > probe.json
 ```
 
 Elle enregistre les réponses de `info`, `summary`, `settings`, `autotune/presets`, `perf-summary` et du
-RPC (mots de passe et identifiants de pool masqués, adresse MAC tronquée ; relisez avant de partager).
+RPC (`summary` et `pools`) (mots de passe et identifiants de pool masqués, adresse MAC tronquée ; relisez avant de partager).
 La documentation de l'API de votre version est aussi servie par le mineur à `http://<ip>/docs`.
 
 ## Dépannage

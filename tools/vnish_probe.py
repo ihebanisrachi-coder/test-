@@ -2,7 +2,7 @@
 """Dump what a Vnish miner answers, to check the field names the integration uses.
 
 Read-only: it logs in (POST /api/v1/unlock) and then only issues GET requests plus
-the CGMiner "summary" RPC. Standard library only, run it from any machine that can
+the CGMiner "summary" and "pools" RPC commands. Standard library only, run it from any machine that can
 reach the miner:
 
     python3 vnish_probe.py 192.168.1.50 --password admin > probe.json
@@ -79,10 +79,11 @@ def main() -> int:
             report[endpoint] = http("GET", f"{base}/{endpoint}", token)
         except (urllib.error.URLError, OSError, ValueError) as err:
             report[endpoint] = {"error": str(err)}
-    try:
-        report["rpc summary"] = rpc(args.host, args.rpc_port, "summary")
-    except (OSError, ValueError) as err:
-        report["rpc summary"] = {"error": str(err)}
+    for command in ("summary", "pools"):
+        try:
+            report[f"rpc {command}"] = rpc(args.host, args.rpc_port, command)
+        except (OSError, ValueError) as err:
+            report[f"rpc {command}"] = {"error": str(err)}
 
     json.dump(redact(report), sys.stdout, indent=2, ensure_ascii=False)
     print()

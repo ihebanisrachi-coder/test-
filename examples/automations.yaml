@@ -99,7 +99,8 @@
         message: "Ventilateur 1 sous 500 tr/min alors que le mineur mine."
 
 # 5) Basculer sur le pool de secours si le hashrate s'effondre alors que le mineur
-#    est censé miner (pool mort ou injoignable). Les noms de pools sont les options
+#    est censé miner (pool mort ou injoignable). Seul le pool actif change (switchpool),
+#    la table de pools n'est pas modifiée. Les noms de pools sont les options
 #    de select.antminer_s19_active_pool ("1", "2", "3").
 - alias: "Mineur - bascule sur le pool de secours"
   triggers:

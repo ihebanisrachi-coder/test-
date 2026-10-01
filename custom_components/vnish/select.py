@@ -82,5 +82,5 @@ class VnishPoolSelect(VnishEntity, SelectEntity):
         if pool is None:
             raise HomeAssistantError(f"Unknown pool {option!r}")
         await self._command(
-            self.coordinator.client.set_active_pool(pool["url"], pool.get("user", ""))
+            self.coordinator.client.switch_pool(pool["url"], pool.get("user", ""))
         )
