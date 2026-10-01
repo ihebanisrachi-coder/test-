@@ -19,6 +19,7 @@ import re
 import socket
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ENDPOINTS = ("info", "summary", "settings", "autotune/presets", "perf-summary")
@@ -47,6 +48,44 @@ def http(method: str, url: str, token: str | None = None, body: dict | None = No
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read() or b"{}")
+
+
+SPEC_URL = re.compile(r"""["'(]([^"'()\s]*(?:openapi|swagger)[^"'()\s]*\.json)""", re.I)
+
+
+def http_text(url: str, token: str | None = None) -> str:
+    req = urllib.request.Request(url, headers={"Authorization": token} if token else {})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return resp.read().decode(errors="replace")
+
+
+def api_paths(spec: dict) -> dict[str, list[str]]:
+    """OpenAPI document -> {path: [methods]} (no schemas, no examples)."""
+    paths = spec.get("paths", {}) if isinstance(spec, dict) else {}
+    return {
+        path: sorted(m.upper() for m in ops if m.lower() in {"get", "post", "put", "delete", "patch"})
+        for path, ops in paths.items()
+        if isinstance(ops, dict)
+    }
+
+
+def find_api_spec(host: str, port: int, token: str) -> dict:
+    """List the endpoints the miner documents at /docs (read-only GETs)."""
+    root = f"http://{host}:{port}"
+    candidates = [f"{root}{p}" for p in ("/api/v1/openapi.json", "/docs/openapi.json", "/openapi.json", "/docs/swagger.json", "/swagger.json")]
+    try:
+        page = http_text(f"{root}/docs", token)
+        candidates = [urllib.parse.urljoin(f"{root}/docs/", m) for m in SPEC_URL.findall(page)] + candidates
+    except (urllib.error.URLError, OSError):
+        pass
+    for url in candidates:
+        try:
+            paths = api_paths(json.loads(http_text(url, token)))
+        except (urllib.error.URLError, OSError, ValueError):
+            continue
+        if paths:
+            return {"spec": url, "paths": paths}
+    return {"error": f"no OpenAPI spec found; open {root}/docs in a browser"}
 
 
 def rpc(host: str, port: int, command: str):
@@ -84,6 +123,8 @@ def main() -> int:
             report[f"rpc {command}"] = rpc(args.host, args.rpc_port, command)
         except (OSError, ValueError) as err:
             report[f"rpc {command}"] = {"error": str(err)}
+
+    report["documented endpoints"] = find_api_spec(args.host, args.port, token)
 
     json.dump(redact(report), sys.stdout, indent=2, ensure_ascii=False)
     print()

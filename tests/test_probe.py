@@ -25,3 +25,15 @@ def test_redact_removes_secrets_and_truncates_macs() -> None:
     assert pool == {"url": "pool:3333", "user": "<redacted>", "pass": "<redacted>"}
     assert out["system"]["network_status"]["mac"] == "AA:BB:CC:xx:xx:xx"
     assert out["token"] == "<redacted>"
+
+
+def test_api_paths_lists_methods_only() -> None:
+    spec = {
+        "paths": {
+            "/mining/pause": {"post": {"summary": "x"}, "parameters": []},
+            "/summary": {"get": {}},
+        }
+    }
+
+    assert probe.api_paths(spec) == {"/mining/pause": ["POST"], "/summary": ["GET"]}
+    assert probe.api_paths("not a spec") == {}

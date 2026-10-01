@@ -188,6 +188,13 @@ async def test_switch_pool_refused_by_readonly_rpc(session, fake):
         await make_client(session, fake).switch_pool("backup.example:3333", "wallet.worker")
 
 
+async def test_switch_pool_explains_unimplemented_command(session, fake):
+    fake.rpc_unknown_switchpool = True
+
+    with pytest.raises(VnishApiError, match="does not implement switchpool"):
+        await make_client(session, fake).switch_pool("backup.example:3333", "wallet.worker")
+
+
 async def test_rpc_pools(session, fake):
     pools = await make_client(session, fake).rpc_pools()
 

@@ -249,7 +249,10 @@ class VnishClient:
         except (KeyError, IndexError, TypeError) as err:
             raise VnishApiError("Unexpected RPC switchpool answer") from err
         if status.get("STATUS") not in ("S", "I"):
-            raise VnishApiError(
-                f"switchpool refused: {status.get('Msg', 'no reason given')} "
-                "(the RPC API may be read-only)"
+            msg = str(status.get("Msg", "no reason given"))
+            hint = (
+                "this firmware's RPC API does not implement switchpool"
+                if "invalid command" in msg.lower()
+                else "the RPC API may be read-only"
             )
+            raise VnishApiError(f"switchpool refused: {msg} ({hint})")

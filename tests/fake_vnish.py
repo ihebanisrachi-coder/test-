@@ -72,6 +72,7 @@ class FakeVnish:
         self.rpc_ghs = 110500.0
         self.rpc_pools = copy.deepcopy(RPC_POOLS)
         self.rpc_write_allowed = True
+        self.rpc_unknown_switchpool = False
         self.rpc_commands: list[tuple[str, str | None]] = []
         self.app = web.Application()
         self.app.add_routes(
@@ -143,6 +144,8 @@ class FakeVnish:
             reply: dict[str, Any] = {"STATUS": [{"STATUS": "S"}], "SUMMARY": [{"GHS 5s": self.rpc_ghs}]}
         elif command == "pools":
             reply = {"STATUS": [{"STATUS": "S"}], "POOLS": self.rpc_pools}
+        elif command == "switchpool" and self.rpc_unknown_switchpool:
+            reply = {"STATUS": [{"STATUS": "E", "Msg": "Invalid command"}]}
         elif command == "switchpool" and self.rpc_write_allowed:
             for pool in self.rpc_pools:
                 pool["Stratum Active"] = str(pool["POOL"]) == parameter
