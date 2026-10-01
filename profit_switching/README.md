@@ -1,17 +1,24 @@
-# Bascule du pool selon la rentabilité (BTC / BSV / Quai)
+# Rentabilité des pools de minage : classement Kryptex et bascule automatique
 
 Projet **indépendant** de l'intégration Vnish du dépôt (`custom_components/vnish/`) : ce sont des
-« packages » Home Assistant, sans code Python, qui comparent la rentabilité de trois pools de minage et
-peuvent basculer le pool actif du mineur sur le plus rentable.
+« packages » Home Assistant, sans code d'intégration, qui font deux choses séparées :
+
+1. **Afficher le coin SHA-256 le plus rentable selon Kryptex** (`kryptex_best_sha256.yaml`) ;
+2. **Comparer vos trois pools** (BTC / BSV / Quai) et basculer le pool actif du mineur sur le plus rentable
+   (`pool_profit.yaml` + `pool_profit_switch.yaml`).
 
 | Fichier | Rôle | Dépend de |
 |---|---|---|
+| [`packages/kryptex_best_sha256.yaml`](packages/kryptex_best_sha256.yaml) | Classe tous les coins SHA-256 de Kryptex par rentabilité (USD/TH/jour) et affiche le meilleur | Rien (aucun mineur) |
+| [`dashboard/kryptex_best_sha256_card.yaml`](dashboard/kryptex_best_sha256_card.yaml) | Carte de tableau de bord pour l'afficher | Le package ci-dessus |
 | [`packages/pool_profit.yaml`](packages/pool_profit.yaml) | Lit les API Kryptex, K1Pool et CoinGecko ; calcule les capteurs `Rentabilité BTC / BSV / Quai` et `Meilleur pool` | Rien (aucun mineur) |
 | [`packages/pool_profit_switch.yaml`](packages/pool_profit_switch.yaml) | Automatisation qui bascule le pool actif | Le premier package, et l'intégration Vnish (3 entités à renseigner) |
 | [`tools/pool_probe.py`](tools/pool_probe.py) | Sonde en lecture seule des API de pools, pour vérifier les champs et les prix | Rien |
+| [`tools/gen_kryptex_package.py`](tools/gen_kryptex_package.py) | Génère `kryptex_best_sha256.yaml` ; pour suivre un autre coin, ajoutez-le à sa liste | Rien |
 | [`tests/`](tests/) | Tests sur de vraies réponses des pools et le moteur de Home Assistant | |
 
-Vous pouvez n'installer que le premier package, pour **observer** la rentabilité sans rien automatiser.
+Chaque package s'installe seul. En particulier, `kryptex_best_sha256.yaml` et `pool_profit.yaml` servent à
+**observer** sans rien automatiser.
 
 ## Installation
 
@@ -38,7 +45,35 @@ Numéros de pool = position dans la table de pools du mineur : par défaut 1 = B
 - **L'interrupteur est éteint au premier démarrage** : observez d'abord les capteurs, calibrez le Quai
   (ci-dessous), puis allumez-le.
 
-## Sources des données
+## Coin SHA-256 le plus rentable selon Kryptex
+
+Installez `packages/kryptex_best_sha256.yaml` (même procédure : `config/packages/`, puis redémarrage) et,
+si vous voulez l'afficher, collez `dashboard/kryptex_best_sha256_card.yaml` dans une carte manuelle.
+
+Pour chaque coin SHA-256 de Kryptex (BTC, BCH, FB, XEC, DGB, BSV, Quai) :
+
+- `Kryptex gain` : coin gagné par TH/s et par jour, frais du pool déduits (`estimated_profit_day`) ;
+- `Kryptex prix` : dernier point de la courbe de prix de Kryptex, en USD (un point par heure) ;
+- `Kryptex rentabilité` : gain × prix, en **USD par jour pour 1 TH/s**.
+
+Puis `Meilleur coin SHA256 (Kryptex)` donne le coin en tête, avec en attributs le `classement` complet, les
+coins `indisponibles` et `usd_th_jour` ; `Gain du meilleur coin SHA256` donne sa valeur. Un coin sans donnée
+sort du classement sans bloquer les autres. Les gains sont rafraîchis toutes les 10 minutes, les prix toutes
+les 30 minutes.
+
+**Minage fusionné.** Le pool BTC de Kryptex annonce `mergemining: FB` : miner du BTC y rapporte aussi du FB
+(Fractal Bitcoin). Par défaut, le FB est ajouté à la rentabilité du BTC ; l'interrupteur
+`Kryptex : compter le minage fusionné` le retire. C'est elle qui décide du classement : avec le FB le BTC
+passe en tête, sans lui c'est le BSV. Je n'ai pas pu confirmer que Kryptex crédite ce FB en plus de
+`estimated_profit_day`, qui ne contient que du BTC : si vous voyez que non, éteignez l'interrupteur.
+
+**Quai.** Kryptex ne publie pas d'estimation pour le Quai (`null`) : il est affiché comme indisponible et
+n'entre pas dans le classement. Il reste comparable via K1Pool avec le package `pool_profit.yaml`.
+
+Ce sont des gains **estimés** par Kryptex : ils ne tiennent pas compte de la chance, des seuils de retrait
+ni du délai de maturation des récompenses.
+
+## Sources des données (bascule entre vos trois pools)
 
 | Donnée | Source |
 |---|---|
@@ -71,7 +106,8 @@ curl -O https://raw.githubusercontent.com/ihebanisrachi-coder/test-/main/profit_
 python3 pool_probe.py > pools.json
 ```
 
-Elle interroge les points d'accès publics (aucun compte ni identifiant) et résume chaque réponse.
+Elle interroge les points d'accès publics (aucun compte ni identifiant), y compris tous les coins SHA-256 de
+Kryptex, et résume chaque réponse.
 Si `main` n'est pas à jour, remplacez `main` par le nom de la branche de travail.
 
 ## Tests

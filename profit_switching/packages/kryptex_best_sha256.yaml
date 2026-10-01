@@ -1,0 +1,329 @@
+# Coin SHA-256 le plus rentable selon Kryptex, en USD par jour pour 1 TH/s (frais du pool déduits).
+# FICHIER GÉNÉRÉ par tools/gen_kryptex_package.py : pour ajouter un coin, modifiez la liste COINS du
+# script puis relancez-le, plutôt que ce fichier.
+#
+# Ce package est INDÉPENDANT de tout mineur et de l'intégration Vnish : il ne lit que l'API publique de
+# Kryptex. Installation : copiez-le dans config/packages/ (après avoir activé les packages dans
+# configuration.yaml :  homeassistant: { packages: !include_dir_named packages }), puis redémarrez.
+#
+# Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
+# `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix.
+# Le Quai n'a pas d'estimation chez Kryptex (null) : il reste « indisponible » et n'entre pas dans le
+# classement tant que Kryptex n'en publie pas une.
+
+input_boolean:
+  kryptex_include_merged:
+    name: "Kryptex : compter le minage fusionné"
+    icon: mdi:call-merge
+    initial: true   # BTC + FB : le pool BTC de Kryptex annonce `mergemining: FB`
+
+# --- Données Kryptex ---------------------------------------------------------------
+rest:
+  - resource: https://pool.kryptex.com/btc/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain BTC"
+        unique_id: kryptex_gain_btc
+        unit_of_measurement: "BTC/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/btc/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix BTC"
+        unique_id: kryptex_prix_btc
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/bch/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain BCH"
+        unique_id: kryptex_gain_bch
+        unit_of_measurement: "BCH/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/bch/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix BCH"
+        unique_id: kryptex_prix_bch
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/fb/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain FB"
+        unique_id: kryptex_gain_fb
+        unit_of_measurement: "FB/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/fb/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix FB"
+        unique_id: kryptex_prix_fb
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/xec/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain XEC"
+        unique_id: kryptex_gain_xec
+        unit_of_measurement: "XEC/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/xec/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix XEC"
+        unique_id: kryptex_prix_xec
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/dgb/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain DGB"
+        unique_id: kryptex_gain_dgb
+        unit_of_measurement: "DGB/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/dgb/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix DGB"
+        unique_id: kryptex_prix_dgb
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/bsv/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain BSV"
+        unique_id: kryptex_gain_bsv
+        unit_of_measurement: "BSV/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/bsv/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix BSV"
+        unique_id: kryptex_prix_bsv
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+  - resource: https://pool.kryptex.com/quai-sha256/api/v1/pool/info
+    scan_interval: 600
+    sensor:
+      - name: "Kryptex gain QUAI"
+        unique_id: kryptex_gain_quai
+        unit_of_measurement: "QUAI/TH/jour"
+        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+        json_attributes:
+          - fee
+          - mergemining
+  - resource: https://pool.kryptex.com/api/v1/coin/quai-sha256/price/chart
+    scan_interval: 1800   # la courbe a un point par heure
+    sensor:
+      - name: "Kryptex prix QUAI"
+        unique_id: kryptex_prix_quai
+        unit_of_measurement: "USD"
+        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
+
+# --- Rentabilité par coin, puis classement --------------------------------------------
+template:
+  - sensor:
+      - name: "Kryptex rentabilité BTC"
+        unique_id: kryptex_profit_btc
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_btc') | float * states('sensor.kryptex_prix_btc') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_btc', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_btc') | is_number and states('sensor.kryptex_prix_btc') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_btc') | float(0) * states('sensor.kryptex_prix_btc') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_btc', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité BCH"
+        unique_id: kryptex_profit_bch
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_bch') | float * states('sensor.kryptex_prix_bch') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_bch', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_bch') | is_number and states('sensor.kryptex_prix_bch') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_bch') | float(0) * states('sensor.kryptex_prix_bch') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_bch', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité FB"
+        unique_id: kryptex_profit_fb
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_fb') | float * states('sensor.kryptex_prix_fb') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_fb', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_fb') | is_number and states('sensor.kryptex_prix_fb') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_fb') | float(0) * states('sensor.kryptex_prix_fb') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_fb', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité XEC"
+        unique_id: kryptex_profit_xec
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_xec') | float * states('sensor.kryptex_prix_xec') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_xec', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_xec') | is_number and states('sensor.kryptex_prix_xec') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_xec') | float(0) * states('sensor.kryptex_prix_xec') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_xec', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité DGB"
+        unique_id: kryptex_profit_dgb
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_dgb') | float * states('sensor.kryptex_prix_dgb') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_dgb', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_dgb') | is_number and states('sensor.kryptex_prix_dgb') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_dgb') | float(0) * states('sensor.kryptex_prix_dgb') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_dgb', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité BSV"
+        unique_id: kryptex_profit_bsv
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_bsv', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_bsv') | is_number and states('sensor.kryptex_prix_bsv') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_bsv') | float(0) * states('sensor.kryptex_prix_bsv') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_bsv', 'mergemining') or '' }}
+      - name: "Kryptex rentabilité QUAI"
+        unique_id: kryptex_profit_quai
+        unit_of_measurement: "USD/TH/jour"
+        state: >-
+          {% set own = states('sensor.kryptex_gain_quai') | float * states('sensor.kryptex_prix_quai') | float %}
+          {% set ns = namespace(extra=0) %}
+          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
+            {% for t in (state_attr('sensor.kryptex_gain_quai', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
+              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
+            {% endfor %}
+          {% endif %}
+          {{ (own + ns.extra) | round(5) }}
+        availability: >-
+          {{ states('sensor.kryptex_gain_quai') | is_number and states('sensor.kryptex_prix_quai') | is_number }}
+        attributes:
+          gain_propre: >-
+            {{ (states('sensor.kryptex_gain_quai') | float(0) * states('sensor.kryptex_prix_quai') | float(0)) | round(5) }}
+          minage_fusionne: >-
+            {{ state_attr('sensor.kryptex_gain_quai', 'mergemining') or '' }}
+
+      - name: "Meilleur coin SHA256 (Kryptex)"
+        unique_id: kryptex_best_sha256
+        icon: mdi:trophy
+        state: >-
+          {% set ns = namespace(rows=[]) %}
+          {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
+            {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+            {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
+          {% endfor %}
+          {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
+          {{ rows[0].coin if rows else 'unknown' }}
+        availability: >-
+          {% set ns = namespace(rows=[]) %}
+          {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
+            {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+            {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
+          {% endfor %}
+          {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
+          {{ rows | length > 0 }}
+        attributes:
+          usd_th_jour: >-
+            {% set ns = namespace(rows=[]) %}
+            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
+              {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+              {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
+            {% endfor %}
+            {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
+            {{ rows[0].usd if rows else none }}
+          classement: >-
+            {% set ns = namespace(rows=[]) %}
+            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
+              {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+              {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
+            {% endfor %}
+            {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
+            {% set out = namespace(lines=[]) %}
+            {% for r in rows %}{% set out.lines = out.lines + [r.coin ~ ' = ' ~ (r.usd | round(5))] %}{% endfor %}
+            {{ out.lines }}
+          indisponibles: >-
+            {% set ok = namespace(coins=[]) %}
+            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
+              {% if states('sensor.kryptex_rentabilite_' ~ c | lower) | is_number %}{% set ok.coins = ok.coins + [c] %}{% endif %}
+            {% endfor %}
+            {{ ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] | reject('in', ok.coins) | list }}
+
+      - name: "Gain du meilleur coin SHA256"
+        unique_id: kryptex_best_sha256_usd
+        unit_of_measurement: "USD/TH/jour"
+        icon: mdi:currency-usd
+        state: "{{ state_attr('sensor.meilleur_coin_sha256_kryptex', 'usd_th_jour') | round(5) }}"
+        availability: "{{ state_attr('sensor.meilleur_coin_sha256_kryptex', 'usd_th_jour') is number }}"
