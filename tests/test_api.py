@@ -49,7 +49,7 @@ def make_client(session, fake: FakeVnish, password: str = "admin") -> VnishClien
 async def test_unlock_then_bare_token(session, fake):
     data = await make_client(session, fake).summary()
 
-    assert data["miner"]["power_usage"] == 3250
+    assert data["miner"]["power_consumption"] == 3250
     assert fake.calls == [
         ("POST", "unlock", None),
         ("GET", "summary", "tok-1"),
@@ -154,45 +154,21 @@ async def test_rpc_unreachable(session, fake):
         await make_client(session, fake).rpc_summary()
 
 
-async def test_switch_pool_uses_rpc_only(session, fake):
-    await make_client(session, fake).switch_pool("backup.example:3333", "wallet.worker")
+async def test_switch_pool_posts_pool_id_and_nothing_else(session, fake):
+    await make_client(session, fake).switch_pool(1)
 
-    assert ("switchpool", "1") in fake.rpc_commands
-    assert fake.rpc_pools[1]["Stratum Active"] is True
+    assert fake.bodies["switch-pool"] == {"pool_id": 1}
+    assert fake.calls[-1] == ("POST", "mining/switch-pool", "tok-1")
     # Pool table untouched, mining not restarted.
     assert "settings" not in fake.bodies
-    assert not [c for c in fake.calls if c[0] == "POST" and c[1] != "unlock"]
+    assert "mining/restart" not in [c[1] for c in fake.calls]
 
 
-async def test_switch_pool_to_the_first_pool_sends_index_zero(session, fake):
-    await make_client(session, fake).switch_pool("pool.example:3333", "wallet.worker")
+async def test_switch_pool_endpoint_missing_is_reported(session, fake):
+    fake.has_switch_pool = False
 
-    assert ("switchpool", "0") in fake.rpc_commands
-
-
-async def test_switch_pool_matches_url_when_user_differs(session, fake):
-    await make_client(session, fake).switch_pool("backup.example:3333", "other-user")
-
-    assert ("switchpool", "1") in fake.rpc_commands
-
-
-async def test_switch_pool_unknown(session, fake):
-    with pytest.raises(VnishApiError, match="not known"):
-        await make_client(session, fake).switch_pool("nope:1", "x")
-
-
-async def test_switch_pool_refused_by_readonly_rpc(session, fake):
-    fake.rpc_write_allowed = False
-
-    with pytest.raises(VnishApiError, match="Access denied"):
-        await make_client(session, fake).switch_pool("backup.example:3333", "wallet.worker")
-
-
-async def test_switch_pool_explains_unimplemented_command(session, fake):
-    fake.rpc_unknown_switchpool = True
-
-    with pytest.raises(VnishApiError, match="does not implement switchpool"):
-        await make_client(session, fake).switch_pool("backup.example:3333", "wallet.worker")
+    with pytest.raises(VnishApiError, match="mining/switch-pool returned HTTP 404"):
+        await make_client(session, fake).switch_pool(1)
 
 
 async def test_rpc_pools(session, fake):

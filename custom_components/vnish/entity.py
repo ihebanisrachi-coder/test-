@@ -30,3 +30,9 @@ class VnishEntity(CoordinatorEntity[VnishCoordinator]):
         except VnishError as err:
             raise HomeAssistantError(f"Vnish command failed: {err}") from err
         await self.coordinator.async_request_refresh()
+
+    async def _switch_pool(self, label: str) -> None:
+        pool_id = self.coordinator.data.pool_id(label)
+        if pool_id is None:
+            raise HomeAssistantError(f"Pool {label} is not known to the miner")
+        await self._command(self.coordinator.client.switch_pool(pool_id))

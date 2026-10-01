@@ -109,8 +109,8 @@ def test_identity_helpers() -> None:
     assert firmware_version({"miner": {"miner_type": "Antminer S19"}}) is None
 
 
-def _pool_data(active_url: str) -> VnishData:
-    return VnishData(
+def _pool_data(active_url: str, *, source: str = "summary") -> VnishData:
+    data = VnishData(
         summary={},
         settings={
             "miner": {
@@ -121,11 +121,23 @@ def _pool_data(active_url: str) -> VnishData:
                 ]
             }
         },
-        rpc_pools=[
-            {"POOL": 0, "URL": "stratum+tcp://A:1/", "User": "u", "Stratum Active": active_url == "a:1"},
-            {"POOL": 1, "URL": "stratum+tcp://b:1", "User": "u", "Stratum Active": active_url == "b:1"},
-        ],
     )
+    if source == "summary":
+        data.summary = {
+            "miner": {
+                "pools": [
+                    {"id": 0, "url": "stratum+tcp://A:1/", "user": "u", "status": "active" if active_url == "a:1" else "working"},
+                    {"id": 1, "url": "b:1", "user": "u", "status": "active" if active_url == "b:1" else "working"},
+                    {"id": 2, "url": "DevFee", "user": "dev", "status": "working"},
+                ]
+            }
+        }
+    else:
+        data.rpc_pools = [
+            {"POOL": 0, "URL": "a:1", "User": "u", "Stratum Active": active_url == "a:1"},
+            {"POOL": 1, "URL": "b:1", "User": "u", "Stratum Active": active_url == "b:1"},
+        ]
+    return data
 
 
 def test_pool_numbers_follow_the_settings_table() -> None:
@@ -137,6 +149,31 @@ def test_pool_numbers_follow_the_settings_table() -> None:
     assert data.pool_by_label("9") is None
 
 
+@pytest.mark.parametrize("source", ["summary", "rpc"])
 @pytest.mark.parametrize(("active", "label"), [("a:1", "1"), ("b:1", "2"), ("", None)])
-def test_active_pool_comes_from_the_rpc(active: str, label: str | None) -> None:
-    assert _pool_data(active).active_pool == label
+def test_active_pool(source: str, active: str, label: str | None) -> None:
+    assert _pool_data(active, source=source).active_pool == label
+
+
+@pytest.mark.parametrize("source", ["summary", "rpc"])
+def test_pool_id_is_the_miners_id_not_the_label(source: str) -> None:
+    data = _pool_data("a:1", source=source)
+
+    assert data.pool_id("1") == 0
+    assert data.pool_id("2") == 1
+    assert data.pool_id("9") is None
+
+
+def test_pool_id_unknown_when_the_pool_is_not_running() -> None:
+    data = _pool_data("a:1")
+    data.summary["miner"]["pools"].pop(1)
+
+    assert data.pool_id("2") is None
+
+
+def test_power_prefers_power_consumption_over_deprecated_power_usage() -> None:
+    both = VnishData(summary={"miner": {"power_consumption": 3250, "power_usage": 29.5}})
+    old_firmware = VnishData(summary={"miner": {"power_usage": 3100}})
+
+    assert both.power == 3250
+    assert old_firmware.power == 3100

@@ -11,7 +11,6 @@ from homeassistant.components.button import (
     ButtonEntityDescription,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import VnishConfigEntry
@@ -90,9 +89,4 @@ class VnishPoolButton(VnishEntity, ButtonEntity):
         return super().available and self._label in self.coordinator.data.pool_labels
 
     async def async_press(self) -> None:
-        pool = self.coordinator.data.pool_by_label(self._label)
-        if pool is None:
-            raise HomeAssistantError(f"Pool {self._label!r} is no longer configured")
-        await self._command(
-            self.coordinator.client.switch_pool(pool["url"], pool.get("user", ""))
-        )
+        await self._switch_pool(self._label)

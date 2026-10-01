@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import VnishConfigEntry
@@ -78,9 +77,4 @@ class VnishPoolSelect(VnishEntity, SelectEntity):
         }
 
     async def async_select_option(self, option: str) -> None:
-        pool = self.coordinator.data.pool_by_label(option)
-        if pool is None:
-            raise HomeAssistantError(f"Unknown pool {option!r}")
-        await self._command(
-            self.coordinator.client.switch_pool(pool["url"], pool.get("user", ""))
-        )
+        await self._switch_pool(option)

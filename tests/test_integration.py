@@ -179,21 +179,34 @@ async def test_pool_select(hass: HomeAssistant, client, entry) -> None:
         "select", "select_option", {ATTR_ENTITY_ID: select, "option": "2"}, blocking=True
     )
 
-    client.switch_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
+    client.switch_pool.assert_awaited_once_with(1)  # the miner's pool_id
     client.set_preset.assert_not_awaited()  # nothing else is touched
 
 
 async def test_active_pool_follows_the_miner(hass: HomeAssistant, client, entry) -> None:
     await _setup(hass, entry)
-    pools = client.rpc_pools.return_value
-    pools[0]["Stratum Active"], pools[1]["Stratum Active"] = False, True
+    pools = client.summary.return_value["miner"]["pools"]
+    pools[0]["status"], pools[1]["status"] = "working", "active"
 
     await entry.runtime_data.async_refresh()
 
     assert hass.states.get(f"select.{P}_active_pool").state == "2"
 
 
-async def test_active_pool_unknown_without_rpc(hass: HomeAssistant, client, entry) -> None:
+async def test_active_pool_falls_back_to_rpc_when_summary_has_no_pools(
+    hass: HomeAssistant, client, entry
+) -> None:
+    del client.summary.return_value["miner"]["pools"]
+    rpc = client.rpc_pools.return_value
+    rpc[0]["Stratum Active"], rpc[1]["Stratum Active"] = False, True
+
+    await _setup(hass, entry)
+
+    assert hass.states.get(f"select.{P}_active_pool").state == "2"
+
+
+async def test_active_pool_unknown_without_pool_data(hass: HomeAssistant, client, entry) -> None:
+    del client.summary.return_value["miner"]["pools"]
     client.rpc_pools.side_effect = VnishConnectionError("closed")
 
     await _setup(hass, entry)
@@ -210,7 +223,7 @@ async def test_pool_buttons(hass: HomeAssistant, client, entry) -> None:
         "button", "press", {ATTR_ENTITY_ID: f"button.{P}_use_pool_2"}, blocking=True
     )
 
-    client.switch_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
+    client.switch_pool.assert_awaited_once_with(1)
 
 
 async def test_pool_button_unavailable_when_pool_removed(hass: HomeAssistant, client, entry) -> None:
@@ -221,11 +234,11 @@ async def test_pool_button_unavailable_when_pool_removed(hass: HomeAssistant, cl
     assert hass.states.get(f"button.{P}_use_pool_2").state == "unavailable"
 
 
-async def test_pool_switch_refused_is_reported(hass: HomeAssistant, client, entry) -> None:
-    client.switch_pool.side_effect = VnishApiError("switchpool refused")
+async def test_pool_switch_failure_is_reported(hass: HomeAssistant, client, entry) -> None:
+    client.switch_pool.side_effect = VnishApiError("POST mining/switch-pool returned HTTP 404")
     await _setup(hass, entry)
 
-    with pytest.raises(HomeAssistantError, match="switchpool refused"):
+    with pytest.raises(HomeAssistantError, match="switch-pool returned HTTP 404"):
         await hass.services.async_call(
             "button", "press", {ATTR_ENTITY_ID: f"button.{P}_use_pool_2"}, blocking=True
         )

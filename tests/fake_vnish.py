@@ -13,7 +13,8 @@ SUMMARY: dict[str, Any] = {
     "miner": {
         "miner_type": "Antminer S19 (Vnish 1.2.6)",
         "miner_status": {"miner_state": "mining", "miner_state_time": 3600},
-        "power_usage": 3250,
+        "power_usage": 29.5,  # deprecated: efficiency, not watts
+        "power_consumption": 3250,
         "chip_temp": {"min": 60, "max": 78},
         "pcb_temp": {"min": 50, "max": 65},
         "cooling": {
@@ -26,6 +27,11 @@ SUMMARY: dict[str, Any] = {
             ],
         },
         "chains": [],
+        "pools": [
+            {"id": 0, "url": "pool.example:3333", "user": "wallet.worker", "pool_type": "UserPool", "status": "active"},
+            {"id": 1, "url": "backup.example:3333", "user": "wallet.worker", "pool_type": "UserPool", "status": "working"},
+            {"id": 2, "url": "DevFee", "user": "dev", "pool_type": "DevFee", "status": "working"},
+        ],
     },
     "system": {
         "network_status": {"mac": "AA:BB:CC:DD:EE:FF", "hostname": "antminer-s19"}
@@ -69,10 +75,9 @@ class FakeVnish:
         self.presets: Any = copy.deepcopy(PRESETS)
         self.settings_reply: dict[str, Any] = {"restart_required": False, "reboot_required": False}
         self.apply_settings = True
+        self.has_switch_pool = True
         self.rpc_ghs = 110500.0
         self.rpc_pools = copy.deepcopy(RPC_POOLS)
-        self.rpc_write_allowed = True
-        self.rpc_unknown_switchpool = False
         self.rpc_commands: list[tuple[str, str | None]] = []
         self.app = web.Application()
         self.app.add_routes(
@@ -82,6 +87,7 @@ class FakeVnish:
                 web.get("/api/v1/settings", self.get_settings),
                 web.post("/api/v1/settings", self.post_settings),
                 web.get("/api/v1/autotune/presets", self.get_presets),
+                web.post("/api/v1/mining/switch-pool", self.switch_pool),
                 web.post("/api/v1/{tail:.*}", self.command),
             ]
         )
@@ -131,6 +137,17 @@ class FakeVnish:
             return web.Response(status=401)
         return web.json_response(self.presets)
 
+    async def switch_pool(self, request: web.Request) -> web.Response:
+        if not self._authorized(request):
+            return web.Response(status=401)
+        if not self.has_switch_pool:
+            return web.Response(status=404)
+        body = await request.json()
+        self.bodies["switch-pool"] = body
+        for pool in self.summary["miner"]["pools"]:
+            pool["status"] = "active" if pool["id"] == body["pool_id"] else "working"
+        return web.json_response({})
+
     async def command(self, request: web.Request) -> web.Response:
         if not self._authorized(request):
             return web.Response(status=401)
@@ -144,12 +161,6 @@ class FakeVnish:
             reply: dict[str, Any] = {"STATUS": [{"STATUS": "S"}], "SUMMARY": [{"GHS 5s": self.rpc_ghs}]}
         elif command == "pools":
             reply = {"STATUS": [{"STATUS": "S"}], "POOLS": self.rpc_pools}
-        elif command == "switchpool" and self.rpc_unknown_switchpool:
-            reply = {"STATUS": [{"STATUS": "E", "Msg": "Invalid command"}]}
-        elif command == "switchpool" and self.rpc_write_allowed:
-            for pool in self.rpc_pools:
-                pool["Stratum Active"] = str(pool["POOL"]) == parameter
-            reply = {"STATUS": [{"STATUS": "S", "Msg": f"Switching to pool {parameter}"}]}
         else:
             reply = {"STATUS": [{"STATUS": "E", "Msg": f"Access denied to '{command}' command"}]}
         writer.write(json.dumps(reply).encode() + b"\x00")

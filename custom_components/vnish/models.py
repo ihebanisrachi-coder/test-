@@ -61,19 +61,19 @@ def _normalize_url(url: Any) -> str:
     return str(url or "").split("://", 1)[-1].rstrip("/").lower()
 
 
-def find_rpc_pool(
-    pool: dict[str, Any], rpc_pools: list[dict[str, Any]]
+def find_live_pool(
+    pool: dict[str, Any], live_pools: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
-    """The RPC `pools` entry for a pool of the settings table.
+    """The running pool (see `VnishData.live_pools`) behind a settings-table pool.
 
     Same URL and user; if the user differs, accept the URL alone when it is unique.
     """
     same_url = [
-        r for r in rpc_pools if _normalize_url(r.get("URL")) == _normalize_url(pool.get("url"))
+        p for p in live_pools if _normalize_url(p["url"]) == _normalize_url(pool.get("url"))
     ]
-    for rpc_pool in same_url:
-        if str(rpc_pool.get("User", "")) == str(pool.get("user", "")):
-            return rpc_pool
+    for live in same_url:
+        if live["user"] == str(pool.get("user", "")):
+            return live
     return same_url[0] if len(same_url) == 1 else None
 
 
@@ -98,8 +98,16 @@ class VnishData:
 
     @property
     def power(self) -> float | None:
-        """Wall power in watts."""
-        return _num(_get(self.summary, "miner", "power_usage"))
+        """Wall power in watts.
+
+        `power_usage` is deprecated and, on recent firmware, equals the efficiency;
+        it is only used when `power_consumption` is missing (older firmware).
+        """
+        miner = _get(self.summary, "miner")
+        for key in ("power_consumption", "power_usage"):
+            if (value := _num(_get(miner, key))) is not None:
+                return value
+        return None
 
     @property
     def hashrate(self) -> float | None:
@@ -164,16 +172,53 @@ class VnishData:
         return [str(i) for i in range(1, len(self.pools) + 1)]
 
     @property
+    def live_pools(self) -> list[dict[str, Any]]:
+        """Pools as the miner runs them: [{id, url, user, active}].
+
+        From /summary (`pools[].id/status`), or from the RPC `pools` command on
+        firmware whose summary has no pool list.
+        """
+        pools = _get(self.summary, "miner", "pools")
+        if isinstance(pools, list):
+            live = [
+                {
+                    "id": p["id"],
+                    "url": str(p.get("url", "")),
+                    "user": str(p.get("user", "")),
+                    "active": p.get("status") == "active",
+                }
+                for p in pools
+                if isinstance(p, dict) and isinstance(p.get("id"), int)
+            ]
+            if live:
+                return live
+        return [
+            {
+                "id": p["POOL"],
+                "url": str(p.get("URL", "")),
+                "user": str(p.get("User", "")),
+                "active": p.get("Stratum Active") is True,
+            }
+            for p in self.rpc_pools
+            if isinstance(p.get("POOL"), int)
+        ]
+
+    @property
     def active_pool(self) -> str | None:
-        """Label of the pool the miner is currently connected to (from the RPC)."""
-        active = next((r for r in self.rpc_pools if r.get("Stratum Active") is True), None)
-        if active is None:
-            return None
+        """Label of the pool the miner is currently connected to."""
+        live_pools = self.live_pools
         for label, pool in zip(self.pool_labels, self.pools, strict=True):
-            if find_rpc_pool(pool, self.rpc_pools) is active:
+            live = find_live_pool(pool, live_pools)
+            if live is not None and live["active"]:
                 return label
         return None
 
     def pool_by_label(self, label: str) -> dict[str, Any] | None:
         labels = self.pool_labels
         return self.pools[labels.index(label)] if label in labels else None
+
+    def pool_id(self, label: str) -> int | None:
+        """The miner's `pool_id` for a pool label, if the pool is running."""
+        pool = self.pool_by_label(label)
+        live = find_live_pool(pool, self.live_pools) if pool else None
+        return live["id"] if live else None

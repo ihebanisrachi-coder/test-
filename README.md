@@ -30,7 +30,7 @@ Prérequis : Home Assistant 2025.1 ou plus récent (testé avec 2026.2), mineur 
 | `button.<mineur>_restart_mining` | Relance uniquement le minage |
 | `sensor.<mineur>_state` | État Vnish (`mining`, `stopped`, `failure`…) |
 | `sensor.<mineur>_hashrate` | TH/s (commande RPC `summary`, `GHS 5s`) |
-| `sensor.<mineur>_power` | Consommation en W |
+| `sensor.<mineur>_power` | Consommation en W (`power_consumption`) |
 | `sensor.<mineur>_efficiency` | J/TH, calculé |
 | `sensor.<mineur>_chip_temperature` / `_pcb_temperature` | Température max des puces / cartes |
 | `sensor.<mineur>_fan_N` | Vitesse de chaque ventilateur (tr/min) |
@@ -42,13 +42,15 @@ ensuite le réglage pour confirmer qu'il a été pris en compte, et signale une 
 
 ### Changement de pool
 
-Le changement de pool utilise la commande RPC standard CGMiner `switchpool` (port 4028) : seul le
-pool **actif** change. La table de pools de Vnish n'est pas modifiée et le minage n'est pas relancé.
-Conséquences : le changement n'est pas persistant (après un redémarrage du minage ou du mineur, il
-revient à son pool principal configuré) ; pour ajouter ou réordonner des pools, passez par l'interface
-Vnish. Si HA affiche « switchpool refused », l'API RPC de votre mineur n'accepte probablement que la
-lecture. Le pool actif affiché vient de la commande RPC `pools` (`Stratum Active`) ; il est
-« inconnu » si le port 4028 n'est pas joignable.
+Le changement de pool appelle l'endpoint de l'API Vnish/HashCore `POST /mining/switch-pool` avec
+`{"pool_id": N}` : seul le pool **actif** change, la table de pools n'est pas modifiée et le minage
+n'est pas relancé. Le changement n'est probablement pas persistant (après un redémarrage du minage ou
+du mineur, le mineur revient à son pool principal configuré) ; pour ajouter ou réordonner des pools,
+passez par l'interface Vnish. Les numéros 1, 2, 3 sont la position des pools dans la table de pools ;
+le pool de commission (« DevFee ») n'est jamais proposé.
+
+Le pool actif vient de `/summary` (`pools[].status == "active"`), ou à défaut de la commande RPC
+`pools` (`Stratum Active`) ; il est « inconnu » si aucune des deux ne le fournit.
 
 ## Automatisations
 

@@ -10,8 +10,6 @@ from typing import Any
 
 import aiohttp
 
-from .models import find_rpc_pool
-
 _LOGGER = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -232,27 +230,10 @@ class VnishClient:
         if applied != preset:
             raise VnishApiError(f"Preset {preset!r} was not applied (still {applied!r})")
 
-    async def switch_pool(self, url: str, user: str) -> None:
-        """Connect to one of the configured pools right now.
+    async def switch_pool(self, pool_id: int) -> None:
+        """Connect to another configured pool right now.
 
-        Uses the CGMiner ``switchpool`` command: only the active pool changes, the
-        pool table is not rewritten and mining is not restarted. The miner goes
-        back to its configured primary pool after a restart or reboot.
+        Only the active pool changes: the pool table is not rewritten and mining
+        is not restarted. `pool_id` is the pool's `id` in /summary.
         """
-        rpc_pool = find_rpc_pool({"url": url, "user": user}, await self.rpc_pools())
-        if rpc_pool is None or rpc_pool.get("POOL") is None:
-            raise VnishApiError(f"Pool {url!r} is not known to the miner")
-
-        reply = await self._rpc("switchpool", rpc_pool["POOL"])
-        try:
-            status = reply["STATUS"][0]
-        except (KeyError, IndexError, TypeError) as err:
-            raise VnishApiError("Unexpected RPC switchpool answer") from err
-        if status.get("STATUS") not in ("S", "I"):
-            msg = str(status.get("Msg", "no reason given"))
-            hint = (
-                "this firmware's RPC API does not implement switchpool"
-                if "invalid command" in msg.lower()
-                else "the RPC API may be read-only"
-            )
-            raise VnishApiError(f"switchpool refused: {msg} ({hint})")
+        await self._request("POST", "mining/switch-pool", {"pool_id": pool_id})
