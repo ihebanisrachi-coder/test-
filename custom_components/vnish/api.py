@@ -204,14 +204,17 @@ class VnishClient:
     async def reboot(self) -> None:
         await self._command("system/reboot")
 
-    async def _apply_miner_settings(self, miner: dict[str, Any], what: str) -> None:
-        """POST a partial ``miner`` settings block, honouring restart requests."""
-        result = await self._request("POST", "settings", {"miner": miner})
+    async def _save(self, path: str, body: dict[str, Any], what: str) -> None:
+        """POST a change; honour the `restart_required`/`reboot_required` answer."""
+        result = await self._request("POST", path, body)
         if isinstance(result, dict):
             if result.get("restart_required"):
                 await self.restart_mining()
             if result.get("reboot_required"):
                 _LOGGER.warning("%s needs a reboot to apply %s", self._host, what)
+
+    async def _apply_miner_settings(self, miner: dict[str, Any], what: str) -> None:
+        await self._save("settings", {"miner": miner}, what)
 
     async def _miner_settings(self, key: str) -> Any:
         try:
@@ -237,3 +240,7 @@ class VnishClient:
         is not restarted. `pool_id` is the pool's `id` in /summary.
         """
         await self._request("POST", "mining/switch-pool", {"pool_id": pool_id})
+
+    async def set_throttle(self, percent: int) -> None:
+        """Limit the miner to `percent` % (20-100) of its hashrate and power."""
+        await self._save("mining/throttle", {"percent": percent}, f"throttle {percent}%")

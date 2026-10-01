@@ -22,7 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ENDPOINTS = ("info", "summary", "settings", "autotune/presets", "perf-summary")
+ENDPOINTS = ("info", "summary", "status", "settings", "autotune/presets", "perf-summary", "model")
 SECRET_KEYS = {"pass", "pw", "password", "token", "user", "key", "secret"}
 MAC = re.compile(r"\b([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){2})(?::[0-9A-Fa-f]{2}){3}\b")
 

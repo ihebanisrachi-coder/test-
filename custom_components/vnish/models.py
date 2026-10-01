@@ -5,8 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-# miner_state values that mean "the hashboards are not working".
-OFF_STATES = frozenset({"stopped", "shutting-down", "failure", "paused"})
+# Documented `miner_state` values (see the firmware's API reference).
+MINER_STATES = (
+    "mining",
+    "initializing",
+    "starting",
+    "auto-tuning",
+    "restarting",
+    "shutting-down",
+    "stopped",
+    "failure",
+)
+# ... of which these mean "the hashboards are not working".
+OFF_STATES = frozenset({"stopped", "shutting-down", "failure"})
+
+BOARD_STATES = (
+    "initializing",
+    "mining",
+    "stopped",
+    "failure",
+    "disconnected",
+    "disabled",
+    "unknown",
+)
 
 
 def _get(data: Any, *path: str) -> Any:
@@ -42,14 +63,20 @@ def _miner_type(summary: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def model(summary: dict[str, Any]) -> str | None:
-    """'Antminer S19 (Vnish 1.2.6)' -> 'Antminer S19'."""
+def model(summary: dict[str, Any], info: dict[str, Any] | None = None) -> str | None:
+    """Display name from /info, else 'Antminer S19 (Vnish 1.2.6)' -> 'Antminer S19'."""
+    if isinstance(name := _get(info, "miner"), str) and name:
+        return name
     miner_type = _miner_type(summary)
     return miner_type.split("(Vnish")[0].strip() if miner_type else None
 
 
-def firmware_version(summary: dict[str, Any]) -> str | None:
-    """'Antminer S19 (Vnish 1.2.6)' -> '1.2.6'."""
+def firmware_version(
+    summary: dict[str, Any], info: dict[str, Any] | None = None
+) -> str | None:
+    """Version from /info, else 'Antminer S19 (Vnish 1.2.6)' -> '1.2.6'."""
+    if isinstance(version := _get(info, "fw_version"), str) and version:
+        return version
     miner_type = _miner_type(summary)
     if miner_type and "(Vnish" in miner_type:
         return miner_type.split("(Vnish", 1)[1].strip(" )") or None
@@ -86,6 +113,7 @@ class VnishData:
     rpc_summary: dict[str, Any] | None = None
     presets: list[dict[str, Any]] = field(default_factory=list)
     rpc_pools: list[dict[str, Any]] = field(default_factory=list)
+    info: dict[str, Any] = field(default_factory=dict)
 
     @property
     def state(self) -> str | None:
@@ -110,14 +138,36 @@ class VnishData:
         return None
 
     @property
+    def hashrate_unit(self) -> str:
+        """Unit of `hashrate`: the miner reports GH/s (SHA-256) or MH/s (Scrypt)."""
+        return "GH/s" if _get(self.info, "hr_measure") == "MH/s" else "TH/s"
+
+    def _scaled(self, value: Any) -> float | None:
+        """Miner hashrate (GH/s or MH/s) -> `hashrate_unit` (TH/s or GH/s)."""
+        number = _num(value)
+        return None if number is None else number / 1000
+
+    @property
     def hashrate(self) -> float | None:
-        """Hashrate in TH/s (the RPC API reports GH/s)."""
-        ghs = _num(_get(self.rpc_summary, "GHS 5s"))
-        return None if ghs is None else ghs / 1000
+        """Real-time hashrate in `hashrate_unit`.
+
+        From /summary (`hr_realtime`, in the firmware's `hr_measure` unit), else from
+        the RPC `GHS 5s` (SHA-256 only: its unit is not documented for Scrypt).
+        """
+        if (value := self._scaled(_get(self.summary, "miner", "hr_realtime"))) is not None:
+            return value
+        if self.hashrate_unit == "TH/s":
+            return self._scaled(_get(self.rpc_summary, "GHS 5s"))
+        return None
+
+    @property
+    def expected_hashrate(self) -> float | None:
+        """Nominal hashrate of the current preset, in `hashrate_unit`."""
+        return self._scaled(_get(self.summary, "miner", "hr_nominal"))
 
     @property
     def efficiency(self) -> float | None:
-        """J/TH."""
+        """J/TH (J/GH for Scrypt miners)."""
         if self.power is None or not self.hashrate:
             return None
         return self.power / self.hashrate
@@ -140,6 +190,20 @@ class VnishData:
     @property
     def pcb_temp(self) -> float | None:
         return self._max_temp("pcb_temp")
+
+    @property
+    def fan_duty(self) -> float | None:
+        """Overall fan speed in %."""
+        return _num(_get(self.summary, "miner", "cooling", "fan_duty"))
+
+    @property
+    def hw_error_percent(self) -> float | None:
+        return _num(_get(self.summary, "miner", "hw_errors_percent"))
+
+    @property
+    def throttle(self) -> float | None:
+        """Current throttling level in % (100 = not throttled)."""
+        return _num(_get(self.summary, "miner", "miner_status", "throttled"))
 
     @property
     def fans(self) -> list[float | None]:
@@ -222,3 +286,43 @@ class VnishData:
         pool = self.pool_by_label(label)
         live = find_live_pool(pool, self.live_pools) if pool else None
         return live["id"] if live else None
+
+    @property
+    def boards(self) -> list[dict[str, Any]]:
+        """Hashboards: [{hashrate, temperature, state}] in the miner's order."""
+        chains = _get(self.summary, "miner", "chains")
+        if not isinstance(chains, list):
+            return []
+        boards = []
+        for chain in chains:
+            state = _get(chain, "status", "state")
+            boards.append(
+                {
+                    "hashrate": self._scaled(_get(chain, "hashrate_rt")),
+                    "temperature": _num(_get(chain, "chip_temp", "max")),
+                    "state": state if isinstance(state, str) else None,
+                }
+            )
+        return boards
+
+    @property
+    def problems(self) -> list[str]:
+        """What is wrong right now (empty when everything is fine)."""
+        problems = []
+        if self.state == "failure":
+            problems.append("miner failure")
+        problems += [
+            f"board {i} failure" for i, b in enumerate(self.boards, 1) if b["state"] == "failure"
+        ]
+        fans = _get(self.summary, "miner", "cooling", "fans")
+        if isinstance(fans, list):
+            problems += [
+                f"fan {i} lost"
+                for i, fan in enumerate(fans, 1)
+                if _get(fan, "status") == "lost"
+            ]
+        return problems
+
+    @property
+    def problem(self) -> bool | None:
+        return None if self.state is None else bool(self.problems)

@@ -12,6 +12,7 @@ from . import VnishConfigEntry
 from .api import VnishApiError
 from .coordinator import VnishCoordinator
 from .entity import VnishEntity
+from .models import OFF_STATES
 
 
 async def async_setup_entry(
@@ -40,9 +41,15 @@ class VnishMiningSwitch(VnishEntity, SwitchEntity):
         await self._command(self.coordinator.client.stop_mining())
 
     async def _resume(self) -> None:
+        """`start` after a full stop, `resume` after a pause; fall back to the other."""
         client = self.coordinator.client
+        stopped = self.coordinator.data.state in OFF_STATES
+        first, second = (
+            (client.start_mining, client.resume_mining)
+            if stopped
+            else (client.resume_mining, client.start_mining)
+        )
         try:
-            await client.resume_mining()
+            await first()
         except VnishApiError:
-            # Some firmware versions only accept "start" after a full stop.
-            await client.start_mining()
+            await second()

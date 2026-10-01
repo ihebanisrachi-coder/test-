@@ -171,6 +171,27 @@ async def test_switch_pool_endpoint_missing_is_reported(session, fake):
         await make_client(session, fake).switch_pool(1)
 
 
+async def test_set_throttle_posts_percent(session, fake):
+    await make_client(session, fake).set_throttle(60)
+
+    assert fake.bodies["throttle"] == {"percent": 60}
+    assert "mining/restart" not in [c[1] for c in fake.calls]
+
+
+async def test_set_throttle_restarts_only_if_the_miner_asks(session, fake):
+    fake.settings_reply = {"restart_required": True, "reboot_required": False}
+
+    await make_client(session, fake).set_throttle(80)
+
+    assert "mining/restart" in [c[1] for c in fake.calls]
+
+
+async def test_info(session, fake):
+    info = await make_client(session, fake).info()
+
+    assert info["hr_measure"] == "GH/s"
+
+
 async def test_rpc_pools(session, fake):
     pools = await make_client(session, fake).rpc_pools()
 

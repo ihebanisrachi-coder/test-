@@ -71,3 +71,21 @@ async def test_reauth_updates_password(hass: HomeAssistant, client, entry) -> No
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_PASSWORD] == "new-secret"
+
+
+async def test_options_change_the_poll_interval(hass: HomeAssistant, client, entry) -> None:
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.update_interval.total_seconds() == 30
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 60}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {"scan_interval": 60}
+    assert entry.runtime_data.update_interval.total_seconds() == 60

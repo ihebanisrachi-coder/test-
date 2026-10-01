@@ -137,3 +137,32 @@
     - action: button.press
       target:
         entity_id: button.antminer_s19_use_pool_2
+
+# 7) Suivre le surplus solaire en continu avec la limitation (20-100 %), sans relancer le minage.
+- alias: "Mineur - limitation selon le surplus solaire"
+  triggers:
+    - trigger: time_pattern
+      minutes: "/5"   # toutes les 5 min, pas à chaque variation du capteur
+  conditions:
+    - condition: state
+      entity_id: switch.antminer_s19_mining
+      state: "on"
+  actions:
+    - action: number.set_value
+      target:
+        entity_id: number.antminer_s19_throttle
+      data:
+        # 40 % sans surplus, +1 % par 35 W d'export (votre capteur, en W), borné à 20-100 %
+        value: "{{ [100, [20, 40 + (states('sensor.solar_export_power') | float(0)) / 35] | max] | min | round(0) }}"
+
+# 8) Alerte sur le capteur « problème » (carte en panne, ventilateur perdu, mineur en défaut).
+- alias: "Mineur - problème détecté"
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.antminer_s19_problem
+      to: "on"
+  actions:
+    - action: notify.notify
+      data:
+        title: "Mineur : problème"
+        message: "{{ state_attr('binary_sensor.antminer_s19_problem', 'problems') | join(', ') }}"

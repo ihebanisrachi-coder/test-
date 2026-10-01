@@ -29,25 +29,114 @@
   },
   "entity": {
     "sensor": {
-      "state": { "name": "État" },
-      "hashrate": { "name": "Hashrate" },
-      "power": { "name": "Puissance" },
-      "efficiency": { "name": "Efficacité" },
-      "chip_temp": { "name": "Température des puces" },
-      "pcb_temp": { "name": "Température des cartes" },
-      "fan": { "name": "Ventilateur {fan}" }
+      "state": {
+        "name": "État",
+        "state": {
+          "mining": "Minage",
+          "initializing": "Initialisation",
+          "starting": "Démarrage",
+          "auto-tuning": "Auto-réglage",
+          "restarting": "Redémarrage",
+          "shutting-down": "Arrêt en cours",
+          "stopped": "Arrêté",
+          "failure": "Panne"
+        }
+      },
+      "hashrate": {
+        "name": "Hashrate"
+      },
+      "power": {
+        "name": "Puissance"
+      },
+      "efficiency": {
+        "name": "Efficacité"
+      },
+      "chip_temp": {
+        "name": "Température des puces"
+      },
+      "pcb_temp": {
+        "name": "Température des cartes"
+      },
+      "fan": {
+        "name": "Ventilateur {fan}"
+      },
+      "expected_hashrate": {
+        "name": "Hashrate attendu"
+      },
+      "fan_duty": {
+        "name": "Vitesse des ventilateurs"
+      },
+      "hw_errors": {
+        "name": "Erreurs matérielles"
+      },
+      "board_hashrate": {
+        "name": "Hashrate carte {board}"
+      },
+      "board_temperature": {
+        "name": "Température carte {board}"
+      },
+      "board_state": {
+        "name": "État carte {board}",
+        "state": {
+          "initializing": "Initialisation",
+          "mining": "Minage",
+          "stopped": "Arrêtée",
+          "failure": "Panne",
+          "disconnected": "Déconnectée",
+          "disabled": "Désactivée",
+          "unknown": "Inconnu"
+        }
+      }
     },
     "switch": {
-      "mining": { "name": "Minage" }
+      "mining": {
+        "name": "Minage"
+      }
     },
     "button": {
-      "reboot": { "name": "Redémarrer le mineur" },
-      "pool": { "name": "Utiliser le pool {pool}" },
-      "restart_mining": { "name": "Redémarrer le minage" }
+      "reboot": {
+        "name": "Redémarrer le mineur"
+      },
+      "pool": {
+        "name": "Utiliser le pool {pool}"
+      },
+      "restart_mining": {
+        "name": "Redémarrer le minage"
+      },
+      "pause_mining": {
+        "name": "Mettre le minage en pause"
+      },
+      "resume_mining": {
+        "name": "Reprendre le minage"
+      }
     },
     "select": {
-      "preset": { "name": "Preset" },
-      "pool": { "name": "Pool actif" }
+      "preset": {
+        "name": "Preset"
+      },
+      "pool": {
+        "name": "Pool actif"
+      }
+    },
+    "binary_sensor": {
+      "problem": {
+        "name": "Problème"
+      }
+    },
+    "number": {
+      "throttle": {
+        "name": "Limitation"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Vnish",
+        "data": {
+          "scan_interval": "Intervalle de relevé (secondes)"
+        }
+      }
     }
   }
 }

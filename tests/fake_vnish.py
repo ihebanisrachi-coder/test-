@@ -12,13 +12,17 @@ from aiohttp import web
 SUMMARY: dict[str, Any] = {
     "miner": {
         "miner_type": "Antminer S19 (Vnish 1.2.6)",
-        "miner_status": {"miner_state": "mining", "miner_state_time": 3600},
+        "miner_status": {"miner_state": "mining", "miner_state_time": 3600, "throttled": 100},
+        "hr_realtime": 110500.0,
+        "hr_nominal": 112000.0,
+        "hw_errors_percent": 0.02,
         "power_usage": 29.5,  # deprecated: efficiency, not watts
         "power_consumption": 3250,
         "chip_temp": {"min": 60, "max": 78},
         "pcb_temp": {"min": 50, "max": 65},
         "cooling": {
             "fan_num": 4,
+            "fan_duty": 72,
             "fans": [
                 {"id": 0, "rpm": 5400, "status": "ok", "max_rpm": 6000},
                 {"id": 1, "rpm": 5390, "status": "ok", "max_rpm": 6000},
@@ -26,7 +30,10 @@ SUMMARY: dict[str, Any] = {
                 {"id": 3, "rpm": 5420, "status": "ok", "max_rpm": 6000},
             ],
         },
-        "chains": [],
+        "chains": [
+            {"id": 0, "hashrate_rt": 55000.0, "chip_temp": {"min": 60, "max": 76}, "status": {"state": "mining"}},
+            {"id": 1, "hashrate_rt": 55500.0, "chip_temp": {"min": 62, "max": 78}, "status": {"state": "mining"}},
+        ],
         "pools": [
             {"id": 0, "url": "pool.example:3333", "user": "wallet.worker", "pool_type": "UserPool", "status": "active"},
             {"id": 1, "url": "backup.example:3333", "user": "wallet.worker", "pool_type": "UserPool", "status": "working"},
@@ -55,6 +62,19 @@ PRESETS: list[dict[str, Any]] = [
     {"name": "3250", "pretty": "3250 watt ~ 110 TH", "status": "tuned", "modded_psu_required": False},
 ]
 
+
+INFO: dict[str, Any] = {
+    "fw_name": "Vnish",
+    "fw_version": "1.2.6",
+    "miner": "Antminer S19j Pro",
+    "model": "s19jpro",
+    "algorithm": "sha256d",
+    "hr_measure": "GH/s",
+    "serial": "SN123456",
+    "system": {
+        "network_status": {"mac": "AA:BB:CC:DD:EE:FF", "hostname": "antminer-s19", "ip": "192.168.1.50"}
+    },
+}
 
 RPC_POOLS: list[dict[str, Any]] = [
     {"POOL": 0, "URL": "stratum+tcp://pool.example:3333", "User": "wallet.worker",
@@ -87,6 +107,8 @@ class FakeVnish:
                 web.get("/api/v1/settings", self.get_settings),
                 web.post("/api/v1/settings", self.post_settings),
                 web.get("/api/v1/autotune/presets", self.get_presets),
+                web.get("/api/v1/info", self.get_info),
+                web.post("/api/v1/mining/throttle", self.throttle),
                 web.post("/api/v1/mining/switch-pool", self.switch_pool),
                 web.post("/api/v1/{tail:.*}", self.command),
             ]
@@ -136,6 +158,17 @@ class FakeVnish:
         if not self._authorized(request):
             return web.Response(status=401)
         return web.json_response(self.presets)
+
+    async def get_info(self, request: web.Request) -> web.Response:
+        if not self._authorized(request):
+            return web.Response(status=401)
+        return web.json_response(INFO)
+
+    async def throttle(self, request: web.Request) -> web.Response:
+        if not self._authorized(request):
+            return web.Response(status=401)
+        self.bodies["throttle"] = await request.json()
+        return web.json_response(self.settings_reply)
 
     async def switch_pool(self, request: web.Request) -> web.Response:
         if not self._authorized(request):

@@ -32,6 +32,18 @@ BUTTONS: tuple[VnishButtonDescription, ...] = (
         press_fn=lambda c: c.reboot(),
     ),
     VnishButtonDescription(
+        key="pause_mining",
+        translation_key="pause_mining",
+        icon="mdi:pause",
+        press_fn=lambda c: c.pause_mining(),
+    ),
+    VnishButtonDescription(
+        key="resume_mining",
+        translation_key="resume_mining",
+        icon="mdi:play",
+        press_fn=lambda c: c.resume_mining(),
+    ),
+    VnishButtonDescription(
         key="restart_mining",
         translation_key="restart_mining",
         device_class=ButtonDeviceClass.RESTART,

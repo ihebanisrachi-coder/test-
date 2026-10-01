@@ -12,14 +12,14 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, Device
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import VnishAuthError, VnishClient, VnishError
-from .const import DOMAIN, SCAN_INTERVAL_SECONDS
+from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 from .models import VnishData, firmware_version, hostname, mac_address, model
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class VnishCoordinator(DataUpdateCoordinator[VnishData]):
-    """Fetch summary (required) plus settings and RPC hashrate (best effort)."""
+    """Fetch summary (required) plus settings, info and RPC data (best effort)."""
 
     config_entry: ConfigEntry
 
@@ -31,10 +31,13 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN} {client.host}",
-            update_interval=timedelta(seconds=SCAN_INTERVAL_SECONDS),
+            update_interval=timedelta(
+                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ),
         )
         self.client = client
         self._presets: list[dict] = []
+        self._info: dict = {}
 
     async def _async_update_data(self) -> VnishData:
         try:
@@ -50,8 +53,12 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
             self._presets = await self._optional(self.client.presets(), "presets") or []
 
         rpc_pools = await self._optional(self.client.rpc_pools(), "RPC pools") or []
+        if not self._info:  # static: model, firmware, serial, hashrate unit
+            self._info = await self._optional(self.client.info(), "info") or {}
 
-        return VnishData(summary, settings, rpc_summary, self._presets, rpc_pools)
+        return VnishData(
+            summary, settings, rpc_summary, self._presets, rpc_pools, self._info
+        )
 
     async def _optional(self, awaitable, what: str):
         """Missing optional data must not make the whole miner unavailable."""
@@ -67,14 +74,16 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
 
     @property
     def device_info(self) -> DeviceInfo:
-        summary = self.data.summary
-        mac = mac_address(summary)
+        summary, info = self.data.summary, self.data.info
+        mac = mac_address(info) or mac_address(summary)
+        serial = info.get("serial")
         return DeviceInfo(
             identifiers={(DOMAIN, self.unique_id)},
             connections={(CONNECTION_NETWORK_MAC, mac)} if mac else set(),
-            name=hostname(summary) or self.config_entry.title,
+            name=hostname(info) or hostname(summary) or self.config_entry.title,
             manufacturer="Vnish",
-            model=model(summary),
-            sw_version=firmware_version(summary),
+            model=model(summary, info),
+            serial_number=serial if isinstance(serial, str) and serial else None,
+            sw_version=firmware_version(summary, info),
             configuration_url=f"http://{self.client.host}",
         )

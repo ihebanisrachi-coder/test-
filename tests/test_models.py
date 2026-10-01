@@ -45,7 +45,7 @@ def test_is_mining(state: str, mining: bool) -> None:
 
 def test_hashrate_converted_from_ghs_to_ths_and_efficiency() -> None:
     data = VnishData(
-        summary={"miner": {"power_usage": 3000}},
+        summary={"miner": {"power_consumption": 3000}},
         rpc_summary={"GHS 5s": "100000.0"},  # cgminer sometimes sends strings
     )
 
@@ -54,7 +54,7 @@ def test_hashrate_converted_from_ghs_to_ths_and_efficiency() -> None:
 
 
 def test_efficiency_needs_a_running_miner() -> None:
-    data = VnishData(summary={"miner": {"power_usage": 50}}, rpc_summary={"GHS 5s": 0})
+    data = VnishData(summary={"miner": {"power_consumption": 50}}, rpc_summary={"GHS 5s": 0})
 
     assert data.efficiency is None
 
@@ -177,3 +177,77 @@ def test_power_prefers_power_consumption_over_deprecated_power_usage() -> None:
 
     assert both.power == 3250
     assert old_firmware.power == 3100
+
+
+def test_summary_hashrate_wins_over_rpc() -> None:
+    data = VnishData(
+        summary={"miner": {"hr_realtime": 100000}}, rpc_summary={"GHS 5s": 1.0}
+    )
+
+    assert data.hashrate == 100.0
+    assert data.hashrate_unit == "TH/s"
+
+
+def test_scrypt_miners_use_mhs_and_ignore_the_rpc_unit() -> None:
+    scrypt = {"hr_measure": "MH/s"}
+
+    assert VnishData(summary={"miner": {"hr_realtime": 9500}}, info=scrypt).hashrate == 9.5
+    assert VnishData(summary={"miner": {"hr_realtime": 9500}}, info=scrypt).hashrate_unit == "GH/s"
+    # The RPC unit is only known for SHA-256: no guessing for Scrypt.
+    assert VnishData(summary={}, rpc_summary={"GHS 5s": 9500}, info=scrypt).hashrate is None
+
+
+def test_boards_and_problems() -> None:
+    data = VnishData(
+        summary={
+            "miner": {
+                "miner_status": {"miner_state": "mining"},
+                "chains": [
+                    {"hashrate_rt": 50000, "chip_temp": {"max": 70}, "status": {"state": "mining"}},
+                    {"hashrate_rt": 0, "status": {"state": "failure"}},
+                ],
+                "cooling": {"fans": [{"rpm": 5000, "status": "ok"}, {"rpm": 0, "status": "lost"}]},
+            }
+        }
+    )
+
+    assert data.boards == [
+        {"hashrate": 50.0, "temperature": 70.0, "state": "mining"},
+        {"hashrate": 0.0, "temperature": None, "state": "failure"},
+    ]
+    assert data.problems == ["board 2 failure", "fan 2 lost"]
+    assert data.problem is True
+
+
+def test_problem_unknown_without_state_and_false_when_healthy() -> None:
+    assert VnishData(summary={}).problem is None
+    healthy = VnishData(summary={"miner": {"miner_status": {"miner_state": "mining"}}})
+    assert healthy.problem is False
+    assert VnishData(summary={"miner": {"miner_status": {"miner_state": "failure"}}}).problems == [
+        "miner failure"
+    ]
+
+
+def test_throttle_fan_duty_and_error_rate() -> None:
+    data = VnishData(
+        summary={
+            "miner": {
+                "miner_status": {"throttled": 60},
+                "cooling": {"fan_duty": 55},
+                "hw_errors_percent": 0.5,
+                "hr_nominal": 112000,
+            }
+        }
+    )
+
+    assert (data.throttle, data.fan_duty, data.hw_error_percent) == (60, 55, 0.5)
+    assert data.expected_hashrate == 112.0
+
+
+def test_identity_prefers_info() -> None:
+    info = {"miner": "Antminer S19j Pro", "fw_version": "1.3.0"}
+    summary = {"miner": {"miner_type": "Antminer S19 (Vnish 1.2.6)"}}
+
+    assert model(summary, info) == "Antminer S19j Pro"
+    assert firmware_version(summary, info) == "1.3.0"
+    assert model(summary) == "Antminer S19"
