@@ -42,6 +42,7 @@
     },
     "button": {
       "reboot": { "name": "Reboot" },
+      "pool": { "name": "Use pool {pool}" },
       "restart_mining": { "name": "Restart mining" }
     },
     "select": {

@@ -42,6 +42,7 @@
     },
     "button": {
       "reboot": { "name": "Redémarrer le mineur" },
+      "pool": { "name": "Utiliser le pool {pool}" },
       "restart_mining": { "name": "Redémarrer le minage" }
     },
     "select": {

@@ -182,3 +182,23 @@ async def test_pool_select(hass: HomeAssistant, client, entry) -> None:
     )
 
     client.set_active_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
+
+
+async def test_pool_buttons(hass: HomeAssistant, client, entry) -> None:
+    await _setup(hass, entry)
+    primary = f"button.{P}_use_pool_pool_example_3333"
+    backup = f"button.{P}_use_pool_backup_example_3333"
+    assert hass.states.get(primary) is not None
+    assert hass.states.get(f"button.{P}_use_pool_") is None  # empty slot: no button
+
+    await hass.services.async_call("button", "press", {ATTR_ENTITY_ID: backup}, blocking=True)
+
+    client.set_active_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
+
+
+async def test_pool_button_unavailable_when_pool_removed(hass: HomeAssistant, client, entry) -> None:
+    await _setup(hass, entry)
+    client.settings.return_value["miner"]["pools"].pop(1)
+    await entry.runtime_data.async_refresh()
+
+    assert hass.states.get(f"button.{P}_use_pool_backup_example_3333").state == "unavailable"

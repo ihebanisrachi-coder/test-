@@ -123,3 +123,16 @@
     - action: notify.notify
       data:
         message: "Hashrate nul : bascule sur le pool de secours."
+
+# 6) Même bascule avec un bouton (un par pool, nommé d'après l'URL du pool).
+- alias: "Mineur - pool de secours le week-end"
+  triggers:
+    - trigger: time
+      at: "08:00:00"
+  conditions:
+    - condition: time
+      weekday: [sat, sun]
+  actions:
+    - action: button.press
+      target:
+        entity_id: button.antminer_s19_use_pool_backup_example_3333

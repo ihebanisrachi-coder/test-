@@ -70,11 +70,9 @@ class VnishPoolSelect(VnishEntity, SelectEntity):
         return labels[0] if labels else None
 
     async def async_select_option(self, option: str) -> None:
-        data = self.coordinator.data
-        try:
-            pool = data.pools[data.pool_labels.index(option)]
-        except ValueError as err:
-            raise HomeAssistantError(f"Unknown pool {option!r}") from err
+        pool = self.coordinator.data.pool_by_label(option)
+        if pool is None:
+            raise HomeAssistantError(f"Unknown pool {option!r}")
         await self._command(
             self.coordinator.client.set_active_pool(pool["url"], pool.get("user", ""))
         )

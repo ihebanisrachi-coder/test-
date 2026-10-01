@@ -144,3 +144,7 @@ class VnishData:
             url if urls.count(url) == 1 else f"{url} ({p.get('user', '')})"
             for url, p in zip(urls, self.pools, strict=True)
         ]
+
+    def pool_by_label(self, label: str) -> dict[str, Any] | None:
+        labels = self.pool_labels
+        return self.pools[labels.index(label)] if label in labels else None
