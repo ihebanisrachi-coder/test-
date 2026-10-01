@@ -100,7 +100,7 @@
 
 # 5) Basculer sur le pool de secours si le hashrate s'effondre alors que le mineur
 #    est censé miner (pool mort ou injoignable). Les noms de pools sont les options
-#    de select.antminer_s19_active_pool (l'URL du pool).
+#    de select.antminer_s19_active_pool ("1", "2", "3").
 - alias: "Mineur - bascule sur le pool de secours"
   triggers:
     - trigger: numeric_state
@@ -113,18 +113,18 @@
       state: "mining"
     - condition: state
       entity_id: select.antminer_s19_active_pool
-      state: "pool.example:3333"
+      state: "1"
   actions:
     - action: select.select_option
       target:
         entity_id: select.antminer_s19_active_pool
       data:
-        option: "backup.example:3333"
+        option: "2"
     - action: notify.notify
       data:
         message: "Hashrate nul : bascule sur le pool de secours."
 
-# 6) Même bascule avec un bouton (un par pool, nommé d'après l'URL du pool).
+# 6) Même bascule avec un bouton (un par pool, un par numéro de pool).
 - alias: "Mineur - pool de secours le week-end"
   triggers:
     - trigger: time
@@ -135,4 +135,4 @@
   actions:
     - action: button.press
       target:
-        entity_id: button.antminer_s19_use_pool_backup_example_3333
+        entity_id: button.antminer_s19_use_pool_2

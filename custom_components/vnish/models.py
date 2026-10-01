@@ -56,6 +56,10 @@ def firmware_version(summary: dict[str, Any]) -> str | None:
     return None
 
 
+def pool_key(pool: dict[str, Any]) -> tuple[str, str]:
+    return (str(pool.get("url", "")), str(pool.get("user", "")))
+
+
 @dataclass
 class VnishData:
     """One polling round."""
@@ -64,6 +68,7 @@ class VnishData:
     settings: dict[str, Any] | None = None
     rpc_summary: dict[str, Any] | None = None
     presets: list[dict[str, Any]] = field(default_factory=list)
+    pool_order: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def state(self) -> str | None:
@@ -129,21 +134,32 @@ class VnishData:
         return [str(p["name"]) for p in self.presets if p.get("name") is not None]
 
     @property
-    def pools(self) -> list[dict[str, Any]]:
-        """Configured pools, primary first (empty slots dropped)."""
+    def miner_pools(self) -> list[dict[str, Any]]:
+        """Configured pools in the miner's priority order, primary first."""
         pools = _get(self.settings, "miner", "pools")
         if not isinstance(pools, list):
             return []
         return [p for p in pools if isinstance(p, dict) and p.get("url")]
 
     @property
+    def pools(self) -> list[dict[str, Any]]:
+        """The same pools in a stable order (`pool_order`), so numbers don't move."""
+        known = {key: i for i, key in enumerate(self.pool_order)}
+        return sorted(self.miner_pools, key=lambda p: known.get(pool_key(p), len(known)))
+
+    @property
     def pool_labels(self) -> list[str]:
-        """Stable, credential-free names for `pools`: the URL (+ user if URLs clash)."""
-        urls = [str(p["url"]) for p in self.pools]
-        return [
-            url if urls.count(url) == 1 else f"{url} ({p.get('user', '')})"
-            for url, p in zip(urls, self.pools, strict=True)
-        ]
+        """'1', '2', ... for `pools`."""
+        return [str(i) for i in range(1, len(self.pools) + 1)]
+
+    @property
+    def active_pool(self) -> str | None:
+        """Label of the miner's primary pool."""
+        miner_pools = self.miner_pools
+        if not miner_pools:
+            return None
+        keys = [pool_key(p) for p in self.pools]
+        return str(keys.index(pool_key(miner_pools[0])) + 1)
 
     def pool_by_label(self, label: str) -> dict[str, Any] | None:
         labels = self.pool_labels

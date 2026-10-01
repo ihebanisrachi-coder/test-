@@ -12,8 +12,8 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, Device
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import VnishAuthError, VnishClient, VnishError
-from .const import DOMAIN, SCAN_INTERVAL_SECONDS
-from .models import VnishData, firmware_version, hostname, mac_address, model
+from .const import CONF_POOL_ORDER, DOMAIN, SCAN_INTERVAL_SECONDS
+from .models import VnishData, firmware_version, hostname, mac_address, model, pool_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,7 +49,26 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
         if not self._presets:
             self._presets = await self._optional(self.client.presets(), "presets") or []
 
-        return VnishData(summary, settings, rpc_summary, self._presets)
+        data = VnishData(summary, settings, rpc_summary, self._presets)
+        if settings is not None:
+            data.pool_order = self._stable_pool_order(data)
+        return data
+
+    def _stable_pool_order(self, data: VnishData) -> list[tuple[str, str]]:
+        """Pool numbers follow the order first seen, whatever the miner's priority.
+
+        Switching pools reorders the miner's list; without this, "pool 2" would
+        become "pool 1" after being selected. The order is kept in the entry.
+        """
+        present = [pool_key(p) for p in data.miner_pools]
+        saved = [tuple(k) for k in self.config_entry.data.get(CONF_POOL_ORDER, [])]
+        order = [k for k in saved if k in present] + [k for k in present if k not in saved]
+        if order != saved:
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={**self.config_entry.data, CONF_POOL_ORDER: [list(k) for k in order]},
+            )
+        return order
 
     async def _optional(self, awaitable, what: str):
         """Missing optional data must not make the whole miner unavailable."""

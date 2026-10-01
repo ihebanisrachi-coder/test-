@@ -109,19 +109,24 @@ def test_identity_helpers() -> None:
     assert firmware_version({"miner": {"miner_type": "Antminer S19"}}) is None
 
 
-def test_pool_labels_hide_user_unless_urls_clash() -> None:
+def test_pool_numbers_follow_stable_order_not_miner_priority() -> None:
     data = VnishData(
         summary={},
         settings={
             "miner": {
                 "pools": [
-                    {"url": "a:1", "user": "u1"},
+                    {"url": "b:1", "user": "u"},  # primary on the miner
                     {"url": "", "user": ""},
-                    {"url": "b:1", "user": "u1"},
-                    {"url": "b:1", "user": "u2"},
+                    {"url": "a:1", "user": "u"},
+                    {"url": "c:1", "user": "u"},  # not in the saved order yet
                 ]
             }
         },
+        pool_order=[("a:1", "u"), ("b:1", "u")],
     )
 
-    assert data.pool_labels == ["a:1", "b:1 (u1)", "b:1 (u2)"]
+    assert [p["url"] for p in data.pools] == ["a:1", "b:1", "c:1"]
+    assert data.pool_labels == ["1", "2", "3"]
+    assert data.active_pool == "2"
+    assert data.pool_by_label("3")["url"] == "c:1"
+    assert data.pool_by_label("9") is None

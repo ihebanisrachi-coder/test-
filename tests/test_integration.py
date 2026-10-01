@@ -170,28 +170,39 @@ async def test_pool_select(hass: HomeAssistant, client, entry) -> None:
     await _setup(hass, entry)
     select = f"select.{P}_active_pool"
     state = hass.states.get(select)
-    assert state.state == "pool.example:3333"
-    assert state.attributes["options"] == ["pool.example:3333", "backup.example:3333"]
+    assert state.state == "1"
+    assert state.attributes["options"] == ["1", "2"]
+    assert state.attributes["2"] == "backup.example:3333"
     assert "wallet" not in str(state.attributes)  # no credentials exposed
 
     await hass.services.async_call(
-        "select",
-        "select_option",
-        {ATTR_ENTITY_ID: select, "option": "backup.example:3333"},
-        blocking=True,
+        "select", "select_option", {ATTR_ENTITY_ID: select, "option": "2"}, blocking=True
     )
 
     client.set_active_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
 
 
+async def test_pool_numbers_stay_put_when_the_miner_reorders(
+    hass: HomeAssistant, client, entry
+) -> None:
+    await _setup(hass, entry)
+    pools = client.settings.return_value["miner"]["pools"]
+    pools[0], pools[1] = pools[1], pools[0]  # backup is now the primary pool
+    await entry.runtime_data.async_refresh()
+
+    state = hass.states.get(f"select.{P}_active_pool")
+    assert state.state == "2"
+    assert state.attributes["1"] == "pool.example:3333"
+
+
 async def test_pool_buttons(hass: HomeAssistant, client, entry) -> None:
     await _setup(hass, entry)
-    primary = f"button.{P}_use_pool_pool_example_3333"
-    backup = f"button.{P}_use_pool_backup_example_3333"
-    assert hass.states.get(primary) is not None
-    assert hass.states.get(f"button.{P}_use_pool_") is None  # empty slot: no button
+    assert hass.states.get(f"button.{P}_use_pool_1") is not None
+    assert hass.states.get(f"button.{P}_use_pool_3") is None  # empty slot: no button
 
-    await hass.services.async_call("button", "press", {ATTR_ENTITY_ID: backup}, blocking=True)
+    await hass.services.async_call(
+        "button", "press", {ATTR_ENTITY_ID: f"button.{P}_use_pool_2"}, blocking=True
+    )
 
     client.set_active_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")
 
@@ -201,4 +212,4 @@ async def test_pool_button_unavailable_when_pool_removed(hass: HomeAssistant, cl
     client.settings.return_value["miner"]["pools"].pop(1)
     await entry.runtime_data.async_refresh()
 
-    assert hass.states.get(f"button.{P}_use_pool_backup_example_3333").state == "unavailable"
+    assert hass.states.get(f"button.{P}_use_pool_2").state == "unavailable"

@@ -66,8 +66,16 @@ class VnishPoolSelect(VnishEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        labels = self.coordinator.data.pool_labels
-        return labels[0] if labels else None
+        return self.coordinator.data.active_pool
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Pool number -> URL (no credentials)."""
+        data = self.coordinator.data
+        return {
+            label: str(pool["url"])
+            for label, pool in zip(data.pool_labels, data.pools, strict=True)
+        }
 
     async def async_select_option(self, option: str) -> None:
         pool = self.coordinator.data.pool_by_label(option)
