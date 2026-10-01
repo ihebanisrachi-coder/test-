@@ -1,0 +1,92 @@
+# Bascule automatique du pool actif d'un mineur Vnish vers le plus rentable.
+#
+# Ce package est le SEUL élément du projet qui parle au mineur (via l'intégration Vnish) ; il dépend de
+# `pool_profit.yaml` pour les capteurs `Rentabilité …` et `Meilleur pool`. Installez les deux dans
+# config/packages/ (voir le README du dossier), puis redémarrez.
+#
+# SÉCURITÉ : la bascule est désactivée tant que vous n'avez pas allumé `Bascule auto des pools`.
+
+input_boolean:
+  profit_switching_enabled:
+    name: "Bascule auto des pools"
+    icon: mdi:swap-horizontal
+
+# Remis à ces valeurs à chaque redémarrage de Home Assistant : modifiez `initial` ici pour changer.
+input_number:
+  profit_min_gain:
+    name: "Gain minimal pour basculer"
+    icon: mdi:percent
+    min: 0
+    max: 50
+    step: 0.5
+    initial: 5
+    unit_of_measurement: "%"
+    mode: box
+  profit_min_minutes:
+    name: "Durée minimale entre deux bascules"
+    icon: mdi:timer-outline
+    min: 5
+    max: 240
+    step: 5
+    initial: 30
+    unit_of_measurement: "min"
+    mode: box
+
+# --- Automatisation ---------------------------------------------------------------------------
+automation:
+  - alias: "Mineur - bascule auto du pool selon la rentabilité"
+    id: vnish_profit_pool_switch
+    mode: single
+    max_exceeded: silent
+    variables:
+      # À adapter : remplacez « antminer_s19 » par le nom de votre mineur dans Home Assistant.
+      active_pool: select.antminer_s19_active_pool
+      mining: switch.antminer_s19_mining
+      problem: binary_sensor.antminer_s19_problem
+      # Numéro de pool -> capteur de rentabilité.
+      profit:
+        "1": sensor.rentabilite_btc
+        "2": sensor.rentabilite_bsv
+        "3": sensor.rentabilite_quai
+      # Home Assistant convertit le texte "3" en nombre 3 : on le remet en texte à chaque usage.
+      best: "{{ states('sensor.meilleur_pool') }}"
+      current: "{{ states(active_pool) }}"
+    triggers:
+      - trigger: time_pattern
+        minutes: "/10"
+    conditions:
+      - alias: "La bascule auto est activée"
+        condition: state
+        entity_id: input_boolean.profit_switching_enabled
+        state: "on"
+      - alias: "Le mineur mine et n'est pas en panne"
+        condition: template
+        value_template: "{{ is_state(mining, 'on') and is_state(problem, 'off') }}"
+      - alias: "Pool actif et meilleur pool connus, et différents"
+        condition: template
+        value_template: >-
+          {{ (best | string) in profit and (current | string) in profit
+             and (best | string) != (current | string) }}
+      - alias: "Gain suffisant par rapport au pool actif"
+        condition: template
+        value_template: >-
+          {{ states(profit[best | string]) | float(0)
+             >= states(profit[current | string]) | float(0)
+                * (1 + states('input_number.profit_min_gain') | float(5) / 100) }}
+      - alias: "Pool actif inchangé depuis assez longtemps"
+        condition: template
+        value_template: >-
+          {{ (now() - (expand(active_pool) | map(attribute='last_changed') | first)).total_seconds()
+             >= states('input_number.profit_min_minutes') | float(30) * 60 }}
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: "{{ active_pool }}"
+        data:
+          option: "{{ best | string }}"
+      - action: logbook.log
+        data:
+          name: "Bascule auto du pool"
+          message: >-
+            Pool {{ current }} -> {{ best }}
+            ({{ states(profit[current | string]) }} -> {{ states(profit[best | string]) }} USD/TH/jour)

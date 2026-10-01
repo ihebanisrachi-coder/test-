@@ -1,5 +1,5 @@
-"""examples/profit_switching.yaml: the REST parsing runs on real API answers, the sensors and
-the automation run in Home Assistant's own engines."""
+"""profit_switching/packages: the REST parsing runs on real API answers, the sensors and the
+automation run in Home Assistant's own engines."""
 
 from __future__ import annotations
 
@@ -16,8 +16,19 @@ from homeassistant.util.yaml import load_yaml
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
 ROOT = Path(__file__).parent.parent
-PACKAGE = load_yaml(str(ROOT / "examples" / "profit_switching.yaml"))
+SENSORS_FILE = ROOT / "packages" / "pool_profit.yaml"
+SWITCH_FILE = ROOT / "packages" / "pool_profit_switch.yaml"
+SENSORS = load_yaml(str(SENSORS_FILE))
+SWITCH = load_yaml(str(SWITCH_FILE))
 DATA = Path(__file__).parent / "data"
+
+
+def _merged(domain: str, *packages: dict):
+    """What Home Assistant builds from several packages: dicts merge, lists concatenate."""
+    parts = [p[domain] for p in (packages or (SENSORS, SWITCH)) if domain in p]
+    if isinstance(parts[0], dict):
+        return {k: v for part in parts for k, v in part.items()}
+    return [item for part in parts for item in part]
 
 P = "antminer_s19"
 SELECT = f"select.{P}_active_pool"
@@ -28,7 +39,7 @@ def _sample(name: str) -> dict:
 
 
 def _rest(resource_part: str) -> dict:
-    (block,) = [r for r in PACKAGE["rest"] if resource_part in r["resource"]]
+    (block,) = [r for r in SENSORS["rest"] if resource_part in r["resource"]]
     return block
 
 
@@ -122,7 +133,7 @@ async def setup(hass: HomeAssistant, freezer):
     hass.states.async_set(f"binary_sensor.{P}_problem", "off")
 
     for domain in ("input_boolean", "input_number", "template", "automation"):
-        assert await async_setup_component(hass, domain, {domain: PACKAGE[domain]})
+        assert await async_setup_component(hass, domain, {domain: _merged(domain)})
     await hass.async_block_till_done()
     await _settle(hass, freezer)
 
@@ -229,3 +240,42 @@ async def test_nothing_to_do_when_already_on_the_best_pool(hass, setup, freezer)
     await _at(hass, freezer, 40)
 
     assert setup == []
+
+
+# --- 3. The two packages and the Vnish module stay independent --------------------------------
+
+
+async def test_sensors_package_works_alone(hass: HomeAssistant, freezer) -> None:
+    """No miner, no integration, no automation: the profit comparison still runs."""
+    hass.states.async_set("sensor.gain_brut_btc", "49.34")
+    hass.states.async_set("sensor.prix_btc", "85000")
+    hass.states.async_set("sensor.gain_brut_bsv", "205381.1", {"fee": 0.03})
+    hass.states.async_set("sensor.prix_bsv", "20")
+    hass.states.async_set(
+        "sensor.gain_brut_quai", "2.2574", {"coinPriceUsd": "0.01026545", "coinPoolFee": 2}
+    )
+    for domain in ("input_number", "template"):
+        assert await async_setup_component(hass, domain, {domain: SENSORS[domain]})
+    await _settle(hass, freezer)
+
+    assert hass.states.get("sensor.meilleur_pool").state == "1"
+    assert not hass.states.async_entity_ids("automation")
+
+
+def test_sensors_package_never_mentions_a_miner() -> None:
+    """Checked on the parsed content: the comments may explain that there is no dependency."""
+    content = json.dumps(SENSORS).lower()
+
+    assert "automation" not in SENSORS
+    for word in ("vnish", "antminer", "select.", "switch.", "binary_sensor."):
+        assert word not in content, word
+
+
+def test_the_vnish_module_knows_nothing_about_pool_profitability() -> None:
+    module = ROOT.parent / "custom_components" / "vnish"
+    words = ("kryptex", "k1pool", "coingecko", "profit", "rentab")
+
+    for path in module.rglob("*"):
+        if path.is_file() and path.suffix in {".py", ".json", ".yaml"}:
+            text = path.read_text().lower()
+            assert not [w for w in words if w in text], path.name

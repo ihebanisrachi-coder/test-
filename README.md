@@ -98,55 +98,11 @@ actions:
     data: {option: "2"}
 ```
 
-## Bascule automatique selon la rentabilité (BTC / BSV / Quai)
+## Projet distinct : bascule selon la rentabilité
 
-[`examples/profit_switching.yaml`](examples/profit_switching.yaml) est un « package » Home Assistant qui
-compare la rentabilité de vos trois pools et bascule sur le meilleur, avec le menu `active_pool` de
-l'intégration. Par défaut : pool 1 = BTC (f2pool), pool 2 = BSV (Kryptex), pool 3 = Quai (K1Pool).
-
-**Installation**
-
-1. Activez les packages dans `configuration.yaml` si ce n'est pas fait :
-   `homeassistant: { packages: !include_dir_named packages }`.
-2. Copiez `profit_switching.yaml` dans `config/packages/`.
-3. Dans l'automatisation, remplacez `antminer_s19` par le nom de votre mineur (3 entités, tout en haut).
-4. Redémarrez Home Assistant.
-
-**Ce que fait le paquet**
-
-- Les capteurs `Rentabilité BTC`, `Rentabilité BSV`, `Rentabilité Quai` donnent les **USD gagnés par jour
-  pour 1 TH/s, frais du pool déduits**, rafraîchis toutes les 10 minutes. Les trois pools minent en
-  SHA-256 sur le même matériel : la consommation est la même et s'annule, on compare le revenu.
-- `Meilleur pool` (1, 2 ou 3) désigne le plus rentable ; il est indisponible si une des trois valeurs manque.
-- L'automatisation tourne toutes les 10 minutes et bascule seulement si : l'interrupteur
-  `Bascule auto des pools` est allumé, le mineur mine sans panne, le gain dépasse **5 %** et le pool actif
-  n'a pas changé depuis **30 min** (réglables dans les entrées `Gain minimal…` et `Durée minimale…`).
-  Rien ne bascule sur des données partielles.
-- **L'interrupteur est éteint au premier démarrage** : observez d'abord les capteurs, calibrez le Quai
-  (ci-dessous), puis allumez-le.
-
-**Sources des données**
-
-| Donnée | Source |
-|---|---|
-| Gain BTC et BSV par TH/s | Kryptex, `pool/info` → `estimated_profit_day` (coin par H/s et par jour, frais déduits ; recoupé avec le calcul théorique à 1-2 % près) |
-| Gain Quai par TH/s | Calculé depuis K1Pool `stats` : récompense × blocs par jour ÷ hashrate du réseau (Kryptex n'a pas d'estimation pour le Quai) |
-| Prix du Quai | K1Pool (`coinPriceUsd`) |
-| Prix du BTC et du BSV | CoinGecko (`bitcoin`, `bitcoin-cash-sv`) : Kryptex n'a pas de prix pour le BSV |
-
-**À calibrer : le gain du Quai.** Les deux pools ne s'accordent pas sur le temps de bloc du Quai
-(K1Pool : 4,8 s, Kryptex : 1,13 s), ce qui change l'estimation d'un facteur d'environ 4,3 : le Quai vaudrait
-environ 56 % du BTC avec le calcul de K1Pool, 244 % avec celui de Kryptex. Le paquet utilise celui de K1Pool.
-Pour le caler sur la réalité, regardez combien de QUAI vous gagnez par jour sur K1Pool (moyenne sur
-plusieurs jours, le PPLNS fluctue) et réglez `Correction du gain Quai` à :
-
-> facteur = (QUAI gagnés par jour ÷ votre hashrate en TH/s) ÷ (valeur de `Gain brut Quai` × 0,98)
-
-Autres limites : ce sont des gains **estimés** (chance, PPS/PPLNS, seuils de retrait et délai de maturation
-des récompenses diffèrent selon les pools ; le Quai est un coin peu liquide) ; les frais de f2pool sont
-réglés à 2,5 % par défaut (`Frais du pool BTC`, à vérifier sur votre compte) ; chaque changement de pool
-coûte quelques parts en cours, d'où le seuil de gain et le délai minimal. Les sources de prix sont
-vérifiables avec `tools/pool_probe.py` (lecture seule).
+Le dossier [`profit_switching/`](profit_switching/) contient un projet **séparé** de cette intégration :
+il compare la rentabilité de pools de minage (BTC / BSV / Quai) et peut basculer le pool actif du mineur.
+Il n'est pas nécessaire au fonctionnement de l'intégration Vnish, qui n'en dépend pas.
 
 ## À valider sur votre mineur
 
