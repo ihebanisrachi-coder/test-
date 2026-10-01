@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à un mineur Vnish",
+        "description": "Saisissez l'adresse IP du mineur et le mot de passe de son interface web (par défaut sous Vnish : admin).",
+        "data": {
+          "host": "Adresse IP",
+          "password": "Mot de passe"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Se ré-authentifier",
+        "description": "Le mot de passe de {host} a été refusé. Saisissez le mot de passe actuel.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre le mineur. Vérifiez l'adresse IP et que Vnish est installé.",
+      "invalid_auth": "Mot de passe incorrect.",
+      "unknown": "Erreur inattendue, consultez le journal de Home Assistant."
+    },
+    "abort": {
+      "already_configured": "Ce mineur est déjà configuré.",
+      "reauth_successful": "Mot de passe mis à jour."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": { "name": "État" },
+      "hashrate": { "name": "Hashrate" },
+      "power": { "name": "Puissance" },
+      "efficiency": { "name": "Efficacité" },
+      "chip_temp": { "name": "Température des puces" },
+      "pcb_temp": { "name": "Température des cartes" },
+      "fan": { "name": "Ventilateur {fan}" }
+    },
+    "switch": {
+      "mining": { "name": "Minage" }
+    },
+    "button": {
+      "reboot": { "name": "Redémarrer le mineur" },
+      "restart_mining": { "name": "Redémarrer le minage" }
+    },
+    "select": {
+      "preset": { "name": "Preset" }
+    }
+  }
+}

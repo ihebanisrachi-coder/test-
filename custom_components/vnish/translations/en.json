@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to a Vnish miner",
+        "description": "Enter the IP address of the miner and its web interface password (Vnish default: admin).",
+        "data": {
+          "host": "IP address",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "The password for {host} was rejected. Enter the current one.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the miner. Check the IP address and that it runs Vnish.",
+      "invalid_auth": "Wrong password.",
+      "unknown": "Unexpected error, see the Home Assistant log."
+    },
+    "abort": {
+      "already_configured": "This miner is already configured.",
+      "reauth_successful": "Password updated."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": { "name": "State" },
+      "hashrate": { "name": "Hashrate" },
+      "power": { "name": "Power" },
+      "efficiency": { "name": "Efficiency" },
+      "chip_temp": { "name": "Chip temperature" },
+      "pcb_temp": { "name": "PCB temperature" },
+      "fan": { "name": "Fan {fan}" }
+    },
+    "switch": {
+      "mining": { "name": "Mining" }
+    },
+    "button": {
+      "reboot": { "name": "Reboot" },
+      "restart_mining": { "name": "Restart mining" }
+    },
+    "select": {
+      "preset": { "name": "Preset" }
+    }
+  }
+}

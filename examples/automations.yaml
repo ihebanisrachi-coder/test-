@@ -1,0 +1,99 @@
+# Exemples d'automatisations pour l'intégration Vnish.
+# Adaptez les entity_id : ils dérivent du nom d'hôte du mineur
+# (ici « antminer-s19 » -> switch.antminer_s19_mining, etc.).
+
+# 1) Arrêter le minage aux heures pleines, le relancer en heures creuses.
+- alias: "Mineur - pause heures pleines"
+  triggers:
+    - trigger: time
+      at: "06:00:00"
+  actions:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.antminer_s19_mining
+
+- alias: "Mineur - reprise heures creuses"
+  triggers:
+    - trigger: time
+      at: "22:00:00"
+  actions:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.antminer_s19_mining
+
+# 2) Suivre le surplus solaire : monter/baisser le preset (= la puissance).
+#    Les noms de presets valides sont dans les options de select.antminer_s19_preset.
+#    Changer de preset relance le minage : gardez une hystérésis large et un « for »
+#    long pour éviter de relancer le mineur en permanence.
+- alias: "Mineur - preset haut si surplus solaire"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.solar_export_power   # votre capteur d'export, en W
+      above: 3000
+      for: "00:10:00"
+  conditions:
+    - condition: state
+      entity_id: switch.antminer_s19_mining
+      state: "on"
+  actions:
+    - action: select.select_option
+      target:
+        entity_id: select.antminer_s19_preset
+      data:
+        option: "3250"
+
+- alias: "Mineur - preset bas sans surplus"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.solar_export_power
+      below: 500
+      for: "00:15:00"
+  actions:
+    - action: select.select_option
+      target:
+        entity_id: select.antminer_s19_preset
+      data:
+        option: "2000"
+
+# 3) Protection surchauffe : couper et prévenir.
+- alias: "Mineur - surchauffe"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.antminer_s19_chip_temperature
+      above: 90
+      for: "00:02:00"
+  actions:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.antminer_s19_mining
+    - action: notify.notify
+      data:
+        title: "Mineur arrêté"
+        message: "Température des puces {{ states('sensor.antminer_s19_chip_temperature') }} °C"
+
+# 4) Mineur injoignable ou ventilateur en panne.
+- alias: "Mineur - hors ligne"
+  triggers:
+    - trigger: state
+      entity_id: sensor.antminer_s19_power
+      to: "unavailable"
+      for: "00:10:00"
+  actions:
+    - action: notify.notify
+      data:
+        message: "Le mineur ne répond plus depuis 10 minutes."
+
+- alias: "Mineur - ventilateur à l'arrêt"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.antminer_s19_fan_1
+      below: 500
+      for: "00:03:00"
+  conditions:
+    - condition: state
+      entity_id: switch.antminer_s19_mining
+      state: "on"
+  actions:
+    - action: notify.notify
+      data:
+        message: "Ventilateur 1 sous 500 tr/min alors que le mineur mine."
