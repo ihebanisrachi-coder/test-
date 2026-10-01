@@ -37,3 +37,15 @@ def test_api_paths_lists_methods_only() -> None:
 
     assert probe.api_paths(spec) == {"/mining/pause": ["POST"], "/summary": ["GET"]}
     assert probe.api_paths("not a spec") == {}
+
+
+def test_spec_candidates_prefer_what_the_docs_page_references() -> None:
+    page = """<script>SwaggerUIBundle({ url: "doc.json" })</script>
+              <link href="/static/other.yaml">"""
+
+    urls = probe.spec_candidates("http://m:80", page)
+
+    assert urls[0] == "http://m:80/docs/doc.json"
+    assert "http://m:80/static/other.yaml" in urls
+    assert "http://m:80/api/v1/openapi.json" in urls
+    assert len(urls) == len(set(urls))

@@ -50,7 +50,10 @@ def http(method: str, url: str, token: str | None = None, body: dict | None = No
         return json.loads(resp.read() or b"{}")
 
 
-SPEC_URL = re.compile(r"""["'(]([^"'()\s]*(?:openapi|swagger)[^"'()\s]*\.json)""", re.I)
+# Spec files referenced by the /docs page: Swagger UI's `url: "..."` or any *.json/*.yaml.
+SPEC_REF = re.compile(r"""url\s*[:=]\s*["']([^"']+)["']|["'(]([^"'()\s]+\.(?:json|ya?ml))""", re.I)
+SPEC_NAMES = ("openapi.json", "swagger.json", "doc.json")
+SPEC_DIRS = ("/docs/", "/", "/api/v1/", "/api/", "/swagger/", "/docs/swagger/")
 
 
 def http_text(url: str, token: str | None = None) -> str:
@@ -69,23 +72,36 @@ def api_paths(spec: dict) -> dict[str, list[str]]:
     }
 
 
+def spec_candidates(root: str, page: str) -> list[str]:
+    """URLs worth trying for the OpenAPI document: referenced by /docs, then usual names."""
+    found = [a or b for a, b in SPEC_REF.findall(page)]
+    guesses = [f"{d}{n}" for d in SPEC_DIRS for n in SPEC_NAMES]
+    urls = [urllib.parse.urljoin(f"{root}/docs/", ref) for ref in found]
+    urls += [f"{root}{g}" for g in guesses]
+    return list(dict.fromkeys(urls))
+
+
 def find_api_spec(host: str, port: int, token: str) -> dict:
     """List the endpoints the miner documents at /docs (read-only GETs)."""
     root = f"http://{host}:{port}"
-    candidates = [f"{root}{p}" for p in ("/api/v1/openapi.json", "/docs/openapi.json", "/openapi.json", "/docs/swagger.json", "/swagger.json")]
     try:
         page = http_text(f"{root}/docs", token)
-        candidates = [urllib.parse.urljoin(f"{root}/docs/", m) for m in SPEC_URL.findall(page)] + candidates
-    except (urllib.error.URLError, OSError):
-        pass
-    for url in candidates:
+    except (urllib.error.URLError, OSError) as err:
+        page, error = "", str(err)
+    else:
+        error = ""
+    for url in spec_candidates(root, page):
         try:
             paths = api_paths(json.loads(http_text(url, token)))
         except (urllib.error.URLError, OSError, ValueError):
             continue
         if paths:
             return {"spec": url, "paths": paths}
-    return {"error": f"no OpenAPI spec found; open {root}/docs in a browser"}
+    return {
+        "error": f"no OpenAPI spec found; open {root}/docs in a browser",
+        "docs page error": error,
+        "docs page start": page[:1500],
+    }
 
 
 def rpc(host: str, port: int, command: str):
