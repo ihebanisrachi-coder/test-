@@ -186,28 +186,45 @@ class VnishClient:
     async def reboot(self) -> None:
         await self._command("system/reboot")
 
-    async def set_preset(self, preset: str) -> None:
-        """Select an autotune preset (e.g. a power level) and make sure it stuck."""
-        try:
-            overclock = (await self.settings())["miner"]["overclock"]
-        except (KeyError, TypeError) as err:
-            raise VnishApiError("Unexpected settings layout") from err
-
-        result = await self._request(
-            "POST",
-            "settings",
-            {"miner": {"overclock": {**overclock, "preset": preset}}},
-        )
+    async def _apply_miner_settings(self, miner: dict[str, Any], what: str) -> None:
+        """POST a partial ``miner`` settings block, honouring restart requests."""
+        result = await self._request("POST", "settings", {"miner": miner})
         if isinstance(result, dict):
             if result.get("restart_required"):
                 await self.restart_mining()
             if result.get("reboot_required"):
-                _LOGGER.warning("%s needs a reboot to apply preset %s", self._host, preset)
+                _LOGGER.warning("%s needs a reboot to apply %s", self._host, what)
 
-        # The answer does not say whether the change was accepted: read it back.
+    async def _miner_settings(self, key: str) -> Any:
         try:
-            applied = (await self.settings())["miner"]["overclock"]["preset"]
+            return (await self.settings())["miner"][key]
         except (KeyError, TypeError) as err:
             raise VnishApiError("Unexpected settings layout") from err
+
+    async def set_preset(self, preset: str) -> None:
+        """Select an autotune preset (e.g. a power level) and make sure it stuck."""
+        overclock = await self._miner_settings("overclock")
+        await self._apply_miner_settings(
+            {"overclock": {**overclock, "preset": preset}}, f"preset {preset}"
+        )
+        # The answer does not say whether the change was accepted: read it back.
+        applied = (await self._miner_settings("overclock")).get("preset")
         if applied != preset:
             raise VnishApiError(f"Preset {preset!r} was not applied (still {applied!r})")
+
+    async def set_active_pool(self, url: str, user: str) -> None:
+        """Make a configured pool the primary one (the others stay as failovers)."""
+        pools = await self._miner_settings("pools")
+        chosen = next(
+            (p for p in pools if p.get("url") == url and p.get("user") == user), None
+        )
+        if chosen is None:
+            raise VnishApiError(f"Pool {url!r} is not configured on the miner")
+        if pools[0] is chosen:
+            return
+        await self._apply_miner_settings(
+            {"pools": [chosen, *(p for p in pools if p is not chosen)]}, f"pool {url}"
+        )
+        first = (await self._miner_settings("pools"))[0]
+        if (first.get("url"), first.get("user")) != (url, user):
+            raise VnishApiError(f"Pool {url!r} was not applied")

@@ -45,7 +45,8 @@
       "restart_mining": { "name": "Restart mining" }
     },
     "select": {
-      "preset": { "name": "Preset" }
+      "preset": { "name": "Preset" },
+      "pool": { "name": "Active pool" }
     }
   }
 }

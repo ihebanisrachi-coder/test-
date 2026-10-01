@@ -24,6 +24,7 @@ Prérequis : Home Assistant 2025.1 ou plus récent (testé avec 2026.2), mineur 
 |---|---|
 | `switch.<mineur>_mining` | Arrête (`mining/stop`) / relance (`mining/resume`, puis `mining/start` si refusé) le minage |
 | `select.<mineur>_preset` | Preset d'autotune actif, donc la puissance. Les noms valides sont les options du sélecteur ; leur libellé (« 3250 watt ~ 110 TH ») est dans les attributs |
+| `select.<mineur>_active_pool` | Pool principal, à choisir parmi les pools déjà configurés sur le mineur (les autres restent en secours). Seule l'URL est exposée, jamais les identifiants |
 | `button.<mineur>_reboot` | Redémarre le mineur |
 | `button.<mineur>_restart_mining` | Relance uniquement le minage |
 | `sensor.<mineur>_state` | État Vnish (`mining`, `stopped`, `failure`…) |
@@ -35,7 +36,7 @@ Prérequis : Home Assistant 2025.1 ou plus récent (testé avec 2026.2), mineur 
 
 `<mineur>` est le nom d'hôte du mineur. Les données sont relevées toutes les 30 s.
 
-Changer de preset relance le minage si le mineur le demande (`restart_required`) ; l'intégration relit
+Choisir un pool le place en tête de la liste du mineur ; pour en ajouter un, configurez-le d'abord dans l'interface Vnish. Changer de preset ou de pool relance le minage si le mineur le demande (`restart_required`) ; l'intégration relit
 ensuite le réglage pour confirmer qu'il a été pris en compte, et signale une erreur sinon.
 
 ## Automatisations

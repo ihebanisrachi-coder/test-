@@ -127,3 +127,20 @@ class VnishData:
     @property
     def preset_options(self) -> list[str]:
         return [str(p["name"]) for p in self.presets if p.get("name") is not None]
+
+    @property
+    def pools(self) -> list[dict[str, Any]]:
+        """Configured pools, primary first (empty slots dropped)."""
+        pools = _get(self.settings, "miner", "pools")
+        if not isinstance(pools, list):
+            return []
+        return [p for p in pools if isinstance(p, dict) and p.get("url")]
+
+    @property
+    def pool_labels(self) -> list[str]:
+        """Stable, credential-free names for `pools`: the URL (+ user if URLs clash)."""
+        urls = [str(p["url"]) for p in self.pools]
+        return [
+            url if urls.count(url) == 1 else f"{url} ({p.get('user', '')})"
+            for url, p in zip(urls, self.pools, strict=True)
+        ]

@@ -107,3 +107,21 @@ def test_identity_helpers() -> None:
     assert mac_address(summary) == "AA:BB"
     assert model({}) is None
     assert firmware_version({"miner": {"miner_type": "Antminer S19"}}) is None
+
+
+def test_pool_labels_hide_user_unless_urls_clash() -> None:
+    data = VnishData(
+        summary={},
+        settings={
+            "miner": {
+                "pools": [
+                    {"url": "a:1", "user": "u1"},
+                    {"url": "", "user": ""},
+                    {"url": "b:1", "user": "u1"},
+                    {"url": "b:1", "user": "u2"},
+                ]
+            }
+        },
+    )
+
+    assert data.pool_labels == ["a:1", "b:1 (u1)", "b:1 (u2)"]

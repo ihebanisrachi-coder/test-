@@ -36,7 +36,11 @@ SETTINGS: dict[str, Any] = {
     "miner": {
         "overclock": {"preset": "3250", "globals": {"volt": 0, "freq": 0}},
         "cooling": {"mode": {"name": "auto", "param": 65}},
-        "pools": [{"url": "pool.example:3333", "user": "wallet.worker", "pass": "x"}],
+        "pools": [
+            {"url": "pool.example:3333", "user": "wallet.worker", "pass": "x"},
+            {"url": "backup.example:3333", "user": "wallet.worker", "pass": "y"},
+            {"url": "", "user": "", "pass": ""},
+        ],
     }
 }
 
@@ -107,7 +111,7 @@ class FakeVnish:
         body = await request.json()
         self.bodies["settings"] = body
         if self.apply_settings:
-            self.settings["miner"]["overclock"] = body["miner"]["overclock"]
+            self.settings["miner"].update(body["miner"])
         return web.json_response(self.settings_reply)
 
     async def get_presets(self, request: web.Request) -> web.Response:

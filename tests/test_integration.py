@@ -164,3 +164,21 @@ async def test_fan_sensors_appear_when_the_miner_reports_them(
     await hass.async_block_till_done()
 
     assert hass.states.get(f"sensor.{P}_fan_1").state == "4800.0"
+
+
+async def test_pool_select(hass: HomeAssistant, client, entry) -> None:
+    await _setup(hass, entry)
+    select = f"select.{P}_active_pool"
+    state = hass.states.get(select)
+    assert state.state == "pool.example:3333"
+    assert state.attributes["options"] == ["pool.example:3333", "backup.example:3333"]
+    assert "wallet" not in str(state.attributes)  # no credentials exposed
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {ATTR_ENTITY_ID: select, "option": "backup.example:3333"},
+        blocking=True,
+    )
+
+    client.set_active_pool.assert_awaited_once_with("backup.example:3333", "wallet.worker")

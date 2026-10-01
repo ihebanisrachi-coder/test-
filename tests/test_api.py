@@ -152,3 +152,33 @@ async def test_rpc_unreachable(session, fake):
     fake.rpc_port = 1
     with pytest.raises(VnishConnectionError):
         await make_client(session, fake).rpc_summary()
+
+
+async def test_set_active_pool_moves_it_first_and_keeps_credentials(session, fake):
+    await make_client(session, fake).set_active_pool("backup.example:3333", "wallet.worker")
+
+    sent = fake.bodies["settings"]["miner"]["pools"]
+    assert [p["url"] for p in sent] == ["backup.example:3333", "pool.example:3333", ""]
+    assert sent[0]["pass"] == "y"
+    assert "overclock" not in fake.bodies["settings"]["miner"]
+
+
+async def test_set_active_pool_noop_when_already_primary(session, fake):
+    await make_client(session, fake).set_active_pool("pool.example:3333", "wallet.worker")
+
+    assert "settings" not in fake.bodies
+
+
+async def test_set_active_pool_unknown(session, fake):
+    with pytest.raises(VnishApiError, match="not configured"):
+        await make_client(session, fake).set_active_pool("nope:1", "x")
+
+
+async def test_set_active_pool_restarts_and_detects_rejection(session, fake):
+    fake.settings_reply = {"restart_required": True}
+    await make_client(session, fake).set_active_pool("backup.example:3333", "wallet.worker")
+    assert "mining/restart" in [c[1] for c in fake.calls]
+
+    fake.apply_settings = False
+    with pytest.raises(VnishApiError, match="not applied"):
+        await make_client(session, fake).set_active_pool("pool.example:3333", "wallet.worker")
