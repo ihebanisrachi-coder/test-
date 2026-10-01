@@ -251,3 +251,42 @@ def test_identity_prefers_info() -> None:
     assert model(summary, info) == "Antminer S19j Pro"
     assert firmware_version(summary, info) == "1.3.0"
     assert model(summary) == "Antminer S19"
+
+
+def test_preset_prefers_perf_summary_and_hides_untuned_ones() -> None:
+    data = VnishData(
+        summary={},
+        settings={"miner": {"overclock": {"preset": "3250"}}},
+        perf_summary={"current_preset": {"name": "2000"}},
+        presets=[
+            {"name": "1500", "status": "untuned"},
+            {"name": "2000", "status": "tuned"},
+            {"name": "3250", "status": "tuned"},
+            {"name": "legacy"},  # firmware without a status field
+        ],
+    )
+
+    assert data.preset == "2000"
+    assert data.preset_options == ["2000", "3250", "legacy"]
+
+
+def test_current_untuned_preset_stays_selectable_so_the_menu_can_show_it() -> None:
+    data = VnishData(
+        summary={},
+        settings={"miner": {"overclock": {"preset": "1500"}}},
+        presets=[{"name": "1500", "status": "untuned"}, {"name": "2000", "status": "tuned"}],
+    )
+
+    assert data.preset_options == ["1500", "2000"]
+
+
+def test_manual_overclock_means_no_preset_whatever_perf_summary_says() -> None:
+    data = VnishData(
+        summary={},
+        settings={"miner": {"overclock": {"preset": "disabled"}}},
+        perf_summary={"current_preset": {"name": "3250"}},
+        presets=[{"name": "3250", "status": "tuned"}],
+    )
+
+    assert data.preset == "disabled"
+    assert "disabled" not in data.preset_options

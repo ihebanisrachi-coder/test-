@@ -98,7 +98,7 @@ async def test_presets_accepts_list_or_dict(session, fake, wrap):
 
     presets = await make_client(session, fake).presets()
 
-    assert [p["name"] for p in presets] == ["2000", "3250"]
+    assert [p["name"] for p in presets] == ["2000", "3250", "1500"]
 
 
 async def test_mining_commands_hit_the_right_endpoints(session, fake):
@@ -119,11 +119,16 @@ async def test_mining_commands_hit_the_right_endpoints(session, fake):
     ]
 
 
-async def test_set_preset_keeps_other_overclock_settings(session, fake):
+async def test_set_preset_sends_only_the_preset_name(session, fake):
+    """Sending the old freq/volt/per-chip block along would overwrite the preset's tuning."""
     await make_client(session, fake).set_preset("2000")
 
-    sent = fake.bodies["settings"]["miner"]["overclock"]
-    assert sent == {"preset": "2000", "globals": {"volt": 0, "freq": 0}}
+    assert fake.bodies["settings"] == {"miner": {"overclock": {"preset": "2000"}}}
+    # Nothing is read before writing: only the preset is written, then read back.
+    assert [(c[0], c[1]) for c in fake.calls[1:]] == [
+        ("POST", "settings"),
+        ("GET", "settings"),
+    ]
     assert "mining/restart" not in [c[1] for c in fake.calls]
 
 
@@ -184,6 +189,12 @@ async def test_set_throttle_restarts_only_if_the_miner_asks(session, fake):
     await make_client(session, fake).set_throttle(80)
 
     assert "mining/restart" in [c[1] for c in fake.calls]
+
+
+async def test_perf_summary(session, fake):
+    data = await make_client(session, fake).perf_summary()
+
+    assert data["current_preset"]["name"] == "3250"
 
 
 async def test_info(session, fake):

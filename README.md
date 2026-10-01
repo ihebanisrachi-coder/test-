@@ -61,11 +61,26 @@ pool de commission (« DevFee ») n'est jamais proposé. Le pool actif vient de 
 (`pools[].status == "active"`), ou à défaut de la commande RPC `pools` ; il est « inconnu » si aucune des
 deux ne le fournit.
 
-### Preset, limitation et redémarrage
+### Presets
 
-Changer de preset relance le minage si le mineur le demande (`restart_required`), puis l'intégration relit
-le réglage pour confirmer qu'il a été pris en compte. La limitation (`mining/throttle`) suit la même règle
-si le mineur répond qu'un redémarrage est nécessaire.
+Le menu `select.<mineur>_preset` ne propose que les presets déjà **réglés** (« tuned ») : en choisir un
+non réglé lancerait un autotune de plusieurs heures. Pour en régler un nouveau, utilisez l'interface Vnish.
+
+Changer de preset n'envoie au mineur que le **nom** du preset ; c'est le mineur qui applique alors les
+fréquences et tensions réglées de ce preset. L'intégration relance le minage si le mineur le demande
+(`restart_required`), puis relit le réglage pour confirmer. Le preset affiché est celui réellement appliqué
+(`perf-summary`), qui suit aussi le changement automatique de preset ; il est « inconnu » en overclock
+manuel.
+
+> **Version 0.5.0 et antérieures** : le changement de preset renvoyait aussi l'ancien bloc
+> d'overclock (fréquences, tension, réglages par puce) et pouvait écraser le réglage du preset choisi
+> avec les valeurs du précédent. Si vous les avez utilisées, vérifiez dans l'interface Vnish (onglet
+> Autotune) que vos presets sont toujours marqués « tuned » et non « modified », et relancez l'autotune
+> des presets concernés si besoin. Si le changement automatique de preset (« preset switcher ») est
+> activé, il peut aussi reprendre la main sur un choix manuel.
+
+La limitation (`mining/throttle`) suit la même règle de redémarrage : le minage n'est relancé que si le
+mineur répond qu'un redémarrage est nécessaire.
 
 ## Automatisations
 

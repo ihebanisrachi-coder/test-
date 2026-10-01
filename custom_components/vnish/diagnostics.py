@@ -27,6 +27,7 @@ async def async_get_config_entry_diagnostics(
             "summary": data.summary,
             "settings": data.settings,
             "presets": data.presets,
+            "perf_summary": data.perf_summary,
             "rpc_summary": data.rpc_summary,
             "rpc_pools": data.rpc_pools,
         },

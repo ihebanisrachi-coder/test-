@@ -57,9 +57,15 @@ SETTINGS: dict[str, Any] = {
     }
 }
 
+PERF_SUMMARY: dict[str, Any] = {
+    "preset_switcher": {"enabled": False},
+    "current_preset": {"name": "3250", "pretty": "3250 watt ~ 110 TH", "status": "tuned"},
+}
+
 PRESETS: list[dict[str, Any]] = [
     {"name": "2000", "pretty": "2000 watt ~ 70 TH", "status": "tuned", "modded_psu_required": False},
     {"name": "3250", "pretty": "3250 watt ~ 110 TH", "status": "tuned", "modded_psu_required": False},
+    {"name": "1500", "pretty": "1500 watt ~ 50 TH", "status": "untuned", "modded_psu_required": False},
 ]
 
 
@@ -93,6 +99,7 @@ class FakeVnish:
         self.summary = copy.deepcopy(SUMMARY)
         self.settings = copy.deepcopy(SETTINGS)
         self.presets: Any = copy.deepcopy(PRESETS)
+        self.perf_summary = copy.deepcopy(PERF_SUMMARY)
         self.settings_reply: dict[str, Any] = {"restart_required": False, "reboot_required": False}
         self.apply_settings = True
         self.has_switch_pool = True
@@ -108,6 +115,7 @@ class FakeVnish:
                 web.post("/api/v1/settings", self.post_settings),
                 web.get("/api/v1/autotune/presets", self.get_presets),
                 web.get("/api/v1/info", self.get_info),
+                web.get("/api/v1/perf-summary", self.get_perf_summary),
                 web.post("/api/v1/mining/throttle", self.throttle),
                 web.post("/api/v1/mining/switch-pool", self.switch_pool),
                 web.post("/api/v1/{tail:.*}", self.command),
@@ -151,13 +159,21 @@ class FakeVnish:
         body = await request.json()
         self.bodies["settings"] = body
         if self.apply_settings:
-            self.settings["miner"].update(body["miner"])
+            miner = dict(body["miner"])
+            if "overclock" in miner:  # merge: fields that are not sent are kept
+                miner["overclock"] = {**self.settings["miner"]["overclock"], **miner["overclock"]}
+            self.settings["miner"].update(miner)
         return web.json_response(self.settings_reply)
 
     async def get_presets(self, request: web.Request) -> web.Response:
         if not self._authorized(request):
             return web.Response(status=401)
         return web.json_response(self.presets)
+
+    async def get_perf_summary(self, request: web.Request) -> web.Response:
+        if not self._authorized(request):
+            return web.Response(status=401)
+        return web.json_response(self.perf_summary)
 
     async def get_info(self, request: web.Request) -> web.Response:
         if not self._authorized(request):

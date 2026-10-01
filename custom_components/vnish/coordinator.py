@@ -48,6 +48,7 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
             raise UpdateFailed(str(err)) from err
 
         settings = await self._optional(self.client.settings(), "settings")
+        perf_summary = await self._optional(self.client.perf_summary(), "perf-summary")
         rpc_summary = await self._optional(self.client.rpc_summary(), "RPC summary")
         if not self._presets:
             self._presets = await self._optional(self.client.presets(), "presets") or []
@@ -57,7 +58,13 @@ class VnishCoordinator(DataUpdateCoordinator[VnishData]):
             self._info = await self._optional(self.client.info(), "info") or {}
 
         return VnishData(
-            summary, settings, rpc_summary, self._presets, rpc_pools, self._info
+            summary,
+            settings,
+            rpc_summary,
+            self._presets,
+            rpc_pools,
+            self._info,
+            perf_summary,
         )
 
     async def _optional(self, awaitable, what: str):

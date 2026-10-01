@@ -135,6 +135,10 @@ class VnishClient:
     async def settings(self) -> dict[str, Any]:
         return await self._request("GET", "settings")
 
+    async def perf_summary(self) -> dict[str, Any]:
+        """Current preset (as actually applied) and preset-switcher settings."""
+        return await self._request("GET", "perf-summary")
+
     async def presets(self) -> list[dict[str, Any]]:
         """Autotune presets; the miner answers with a list or {"presets": [...]}."""
         data = await self._request("GET", "autotune/presets")
@@ -223,11 +227,13 @@ class VnishClient:
             raise VnishApiError("Unexpected settings layout") from err
 
     async def set_preset(self, preset: str) -> None:
-        """Select an autotune preset (e.g. a power level) and make sure it stuck."""
-        overclock = await self._miner_settings("overclock")
-        await self._apply_miner_settings(
-            {"overclock": {**overclock, "preset": preset}}, f"preset {preset}"
-        )
+        """Select an autotune preset (e.g. a power level) and make sure it stuck.
+
+        Only the preset *name* is sent. The miner then applies that preset's own tuned
+        frequency/voltage. Sending the rest of the overclock block (globals, per-chip
+        frequencies) would overwrite the preset's tuning with the previous values.
+        """
+        await self._apply_miner_settings({"overclock": {"preset": preset}}, f"preset {preset}")
         # The answer does not say whether the change was accepted: read it back.
         applied = (await self._miner_settings("overclock")).get("preset")
         if applied != preset:

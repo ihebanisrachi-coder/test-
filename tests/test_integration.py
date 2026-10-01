@@ -4,7 +4,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, STATE_OFF, STATE_ON, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.vnish.api import (
     VnishApiError,
@@ -132,6 +132,7 @@ async def test_preset_select(hass: HomeAssistant, client, entry) -> None:
     select = f"select.{P}_preset"
     state = hass.states.get(select)
     assert state.state == "3250"
+    # The untuned preset is not offered: selecting it would start an autotune.
     assert state.attributes["options"] == ["2000", "3250"]
     assert state.attributes["2000"] == "2000 watt ~ 70 TH"
 
@@ -356,3 +357,36 @@ async def test_diagnostics_hide_secrets(hass: HomeAssistant, client, entry) -> N
     for secret in ("wallet.worker", "AA:BB:CC:DD:EE:FF", "SN123456", "192.168.1.50", "'admin'"):
         assert secret not in text
     assert "pool.example:3333" in text  # useful, not secret
+
+
+async def test_current_preset_comes_from_perf_summary(hass: HomeAssistant, client, entry) -> None:
+    """With the automatic preset switcher the saved name can be stale."""
+    client.perf_summary.return_value["current_preset"]["name"] = "2000"
+
+    await _setup(hass, entry)
+
+    assert hass.states.get(f"select.{P}_preset").state == "2000"
+
+
+async def test_preset_falls_back_to_settings_without_perf_summary(
+    hass: HomeAssistant, client, entry
+) -> None:
+    client.perf_summary.side_effect = VnishConnectionError("down")
+
+    await _setup(hass, entry)
+
+    assert hass.states.get(f"select.{P}_preset").state == "3250"
+
+
+async def test_untuned_preset_cannot_be_selected(hass: HomeAssistant, client, entry) -> None:
+    await _setup(hass, entry)
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "select",
+            "select_option",
+            {ATTR_ENTITY_ID: f"select.{P}_preset", "option": "1500"},
+            blocking=True,
+        )
+
+    client.set_preset.assert_not_awaited()

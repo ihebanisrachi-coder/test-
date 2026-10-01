@@ -114,6 +114,7 @@ class VnishData:
     presets: list[dict[str, Any]] = field(default_factory=list)
     rpc_pools: list[dict[str, Any]] = field(default_factory=list)
     info: dict[str, Any] = field(default_factory=dict)
+    perf_summary: dict[str, Any] | None = None
 
     @property
     def state(self) -> str | None:
@@ -215,12 +216,30 @@ class VnishData:
 
     @property
     def preset(self) -> str | None:
-        value = _get(self.settings, "miner", "overclock", "preset")
-        return str(value) if value is not None else None
+        """The preset really in use.
+
+        `perf-summary` is the reference (it follows the automatic preset switcher);
+        the name saved in the settings is the fallback. "disabled" in the settings
+        means manual overclock: no preset is in use whatever `perf-summary` says.
+        """
+        saved = _get(self.settings, "miner", "overclock", "preset")
+        if saved == "disabled":
+            return "disabled"
+        for value in (_get(self.perf_summary, "current_preset", "name"), saved):
+            if value is not None:
+                return str(value)
+        return None
 
     @property
     def preset_options(self) -> list[str]:
-        return [str(p["name"]) for p in self.presets if p.get("name") is not None]
+        """Presets that can be selected safely: already tuned (selecting an untuned one
+        would start an autotune), plus the current one so the menu can show it."""
+        return [
+            str(p["name"])
+            for p in self.presets
+            if p.get("name") is not None
+            and (p.get("status") != "untuned" or str(p["name"]) == self.preset)
+        ]
 
     @property
     def pools(self) -> list[dict[str, Any]]:
