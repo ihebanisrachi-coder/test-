@@ -1,4 +1,7 @@
-"""kryptex_best_sha256.yaml: Kryptex's own answers in, the most profitable SHA-256 coin out."""
+"""kryptex_best_sha256.yaml: Kryptex's own answers in, the most profitable SHA-256 coin out.
+
+Only each coin's own gain counts: merged mining (BTC + FB) is deliberately not added.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +24,8 @@ PACKAGE = load_yaml(str(PACKAGE_FILE))
 sys.path.insert(0, str(ROOT / "tools"))
 import gen_kryptex_package as generator  # noqa: E402
 
-# estimated_profit_day / fee / mergemining as Kryptex answered (pool/info), one entry per coin.
+# estimated_profit_day / fee as Kryptex answered (pool/info), one entry per coin. The BTC pool also
+# announces `mergemining: FB`; the package ignores it.
 POOL_INFO = {
     "btc": {"fee": 0.03, "estimated_profit_day": 4.785094177685909e-19, "mergemining": "FB"},
     "bch": {"fee": 0.03, "estimated_profit_day": 1.205828677180498e-16, "mergemining": ""},
@@ -91,7 +95,7 @@ def test_every_coin_reads_kryptex_and_exposes_what_the_ranking_needs() -> None:
         assert f"https://pool.kryptex.com/{slug}/api/v1/pool/info" in resources
         assert f"https://pool.kryptex.com/api/v1/coin/{slug}/price/chart" in resources
     pool_info = _rest("/btc/api/v1/pool/info")
-    assert pool_info["sensor"][0]["json_attributes"] == ["fee", "mergemining"]
+    assert pool_info["sensor"][0]["json_attributes"] == ["fee"]
 
 
 # --- 2. Ranking, in Home Assistant -----------------------------------------------------------
@@ -108,12 +112,10 @@ async def _settle(hass: HomeAssistant, freezer) -> None:
         await hass.async_block_till_done()
 
 
-def _expected(coin: str, merged: bool = False) -> float:
+def _expected(coin: str) -> float:
+    """USD per TH/s per day: the coin's own gain x its price, nothing else."""
     info = POOL_INFO[{"quai": "quai-sha256"}.get(coin, coin)]
-    own = info["estimated_profit_day"] * 1e12 * PRICES[coin]
-    if merged and coin == "btc":
-        own += POOL_INFO["fb"]["estimated_profit_day"] * 1e12 * PRICES["fb"]
-    return own
+    return info["estimated_profit_day"] * 1e12 * PRICES[coin]
 
 
 @pytest.fixture
@@ -124,54 +126,51 @@ async def setup(hass: HomeAssistant, freezer):
         hass.states.async_set(
             f"sensor.kryptex_gain_{cid}",
             "unknown" if gain is None else str(gain * 1e12),
-            {"fee": info["fee"], "mergemining": info["mergemining"]},
+            {"fee": info["fee"]},
         )
         hass.states.async_set(
             f"sensor.kryptex_prix_{cid}", str(PRICES[cid]) if cid in PRICES else "unknown"
         )
-    for domain in ("input_boolean", "template"):
-        assert await async_setup_component(hass, domain, {domain: PACKAGE[domain]})
+    assert await async_setup_component(hass, "template", {"template": PACKAGE["template"]})
     await _settle(hass, freezer)
 
 
-async def test_btc_wins_when_the_merged_fb_is_counted(hass, setup) -> None:
+async def test_bsv_wins_with_each_coins_own_gain_only(hass, setup) -> None:
     best = hass.states.get(BEST)
 
-    assert best.state == "BTC"
-    btc = _expected("btc", merged=True)
-    assert best.attributes["usd_th_jour"] == pytest.approx(btc, rel=1e-4)
-    assert float(hass.states.get("sensor.kryptex_rentabilite_btc").state) == pytest.approx(btc, rel=1e-4)
-    # own revenue and what comes from the merged coin are both visible
-    attrs = hass.states.get("sensor.kryptex_rentabilite_btc").attributes
-    assert attrs["gain_propre"] == pytest.approx(_expected("btc"), rel=1e-3)
-    assert attrs["minage_fusionne"] == "FB"
-    assert float(hass.states.get("sensor.gain_du_meilleur_coin_sha256").state) == pytest.approx(btc, rel=1e-4)
-
-
-async def test_without_the_merged_coin_bsv_wins(hass, setup, freezer) -> None:
-    await hass.services.async_call(
-        "input_boolean", "turn_off", {"entity_id": "input_boolean.kryptex_include_merged"}, blocking=True
+    assert best.state == "BSV"
+    assert best.attributes["usd_th_jour"] == pytest.approx(_expected("bsv"), rel=1e-4)
+    assert float(hass.states.get("sensor.gain_du_meilleur_coin_sha256").state) == pytest.approx(
+        _expected("bsv"), rel=1e-4
     )
-    await _settle(hass, freezer)
 
-    assert hass.states.get(BEST).state == "BSV"  # 22 USD x 2.0e-3 beats BTC alone
+
+async def test_merged_mining_is_not_counted(hass, setup) -> None:
+    """The BTC pool announces `mergemining: FB`: its FB must not be added to the BTC figure."""
+    btc = hass.states.get("sensor.kryptex_rentabilite_btc")
+
+    assert float(btc.state) == pytest.approx(_expected("btc"), rel=1e-4)
+    assert "minage_fusionne" not in btc.attributes
 
 
 async def test_ranking_is_sorted_and_lists_what_is_unavailable(hass, setup) -> None:
     attrs = hass.states.get(BEST).attributes
 
     names = [line.split(" = ")[0] for line in attrs["classement"]]
-    assert names == ["BTC", "BSV", "DGB", "BCH", "FB", "XEC"]
+    assert names == ["BSV", "BTC", "DGB", "BCH", "FB", "XEC"]
     assert attrs["indisponibles"] == ["QUAI"]  # Kryptex publishes no estimate for it
 
 
-async def test_a_coin_without_price_drops_out_but_the_others_still_rank(hass, setup, freezer) -> None:
-    hass.states.async_set("sensor.kryptex_prix_btc", "unavailable")
+async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
+    hass, setup, freezer
+) -> None:
+    hass.states.async_set("sensor.kryptex_prix_bsv", "unavailable")
     await _settle(hass, freezer)
 
     best = hass.states.get(BEST)
-    assert best.state == "BSV"
-    assert "BTC" in best.attributes["indisponibles"]
+    assert best.state == "BTC"
+    assert "BSV" in best.attributes["indisponibles"]
+    assert best.attributes["usd_th_jour"] == pytest.approx(_expected("btc"), rel=1e-4)
 
 
 async def test_nothing_to_show_when_no_data_at_all(hass, setup, freezer) -> None:
@@ -188,21 +187,21 @@ async def test_nothing_to_show_when_no_data_at_all(hass, setup, freezer) -> None
 
 async def test_the_dashboard_card_shows_the_winner_and_the_ranking(hass, setup) -> None:
     card = load_yaml(str(ROOT / "dashboard" / "kryptex_best_sha256_card.yaml"))
-    markdown = card["cards"][0]["content"]
+    markdown = card["content"]
 
     text = Template(markdown, hass).async_render()
 
-    assert "## BTC" in text
+    assert "## BSV" in text
     assert "USD** par jour pour 1 TH/s" in text
     assert [line for line in text.splitlines() if line.startswith("- ")][:2] == [
-        f"- BTC = {round(_expected('btc', merged=True), 5)}",
         f"- BSV = {round(_expected('bsv'), 5)}",
+        f"- BTC = {round(_expected('btc'), 5)}",
     ]
     assert "Sans estimation : QUAI" in text
 
 
 async def test_the_dashboard_card_degrades_gracefully_without_data(hass) -> None:
-    markdown = load_yaml(str(ROOT / "dashboard" / "kryptex_best_sha256_card.yaml"))["cards"][0]["content"]
+    markdown = load_yaml(str(ROOT / "dashboard" / "kryptex_best_sha256_card.yaml"))["content"]
 
     assert "Aucune donnée Kryptex" in Template(markdown, hass).async_render()
 
@@ -220,3 +219,5 @@ def test_the_package_never_mentions_a_miner() -> None:
     assert "automation" not in PACKAGE
     for word in ("vnish", "antminer", "select.", "switch.", "binary_sensor."):
         assert word not in content, word
+    # and nothing about merged mining is left in the data or the templates
+    assert "mergemining" not in content and "include_merged" not in content

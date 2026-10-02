@@ -7,15 +7,12 @@
 # configuration.yaml :  homeassistant: { packages: !include_dir_named packages }), puis redémarrez.
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
-# `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix.
+# `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
 # Le Quai n'a pas d'estimation chez Kryptex (null) : il reste « indisponible » et n'entre pas dans le
 # classement tant que Kryptex n'en publie pas une.
-
-input_boolean:
-  kryptex_include_merged:
-    name: "Kryptex : compter le minage fusionné"
-    icon: mdi:call-merge
-    initial: true   # BTC + FB : le pool BTC de Kryptex annonce `mergemining: FB`
+#
+# Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
+# Kryptex) n'est pas ajouté, pour ne pas surestimer.
 
 # --- Données Kryptex ---------------------------------------------------------------
 rest:
@@ -28,7 +25,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/btc/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -45,7 +41,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/bch/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -62,7 +57,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/fb/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -79,7 +73,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/xec/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -96,7 +89,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/dgb/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -113,7 +105,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/bsv/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -130,7 +121,6 @@ rest:
         value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
         json_attributes:
           - fee
-          - mergemining
   - resource: https://pool.kryptex.com/api/v1/coin/quai-sha256/price/chart
     scan_interval: 1800   # la courbe a un point par heure
     sensor:
@@ -146,135 +136,51 @@ template:
         unique_id: kryptex_profit_btc
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_btc') | float * states('sensor.kryptex_prix_btc') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_btc', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_btc') | float * states('sensor.kryptex_prix_btc') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_btc') | is_number and states('sensor.kryptex_prix_btc') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_btc') | float(0) * states('sensor.kryptex_prix_btc') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_btc', 'mergemining') or '' }}
       - name: "Kryptex rentabilité BCH"
         unique_id: kryptex_profit_bch
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_bch') | float * states('sensor.kryptex_prix_bch') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_bch', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_bch') | float * states('sensor.kryptex_prix_bch') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_bch') | is_number and states('sensor.kryptex_prix_bch') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_bch') | float(0) * states('sensor.kryptex_prix_bch') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_bch', 'mergemining') or '' }}
       - name: "Kryptex rentabilité FB"
         unique_id: kryptex_profit_fb
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_fb') | float * states('sensor.kryptex_prix_fb') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_fb', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_fb') | float * states('sensor.kryptex_prix_fb') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_fb') | is_number and states('sensor.kryptex_prix_fb') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_fb') | float(0) * states('sensor.kryptex_prix_fb') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_fb', 'mergemining') or '' }}
       - name: "Kryptex rentabilité XEC"
         unique_id: kryptex_profit_xec
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_xec') | float * states('sensor.kryptex_prix_xec') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_xec', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_xec') | float * states('sensor.kryptex_prix_xec') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_xec') | is_number and states('sensor.kryptex_prix_xec') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_xec') | float(0) * states('sensor.kryptex_prix_xec') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_xec', 'mergemining') or '' }}
       - name: "Kryptex rentabilité DGB"
         unique_id: kryptex_profit_dgb
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_dgb') | float * states('sensor.kryptex_prix_dgb') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_dgb', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_dgb') | float * states('sensor.kryptex_prix_dgb') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_dgb') | is_number and states('sensor.kryptex_prix_dgb') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_dgb') | float(0) * states('sensor.kryptex_prix_dgb') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_dgb', 'mergemining') or '' }}
       - name: "Kryptex rentabilité BSV"
         unique_id: kryptex_profit_bsv
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_bsv', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_bsv') | is_number and states('sensor.kryptex_prix_bsv') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_bsv') | float(0) * states('sensor.kryptex_prix_bsv') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_bsv', 'mergemining') or '' }}
       - name: "Kryptex rentabilité QUAI"
         unique_id: kryptex_profit_quai
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {% set own = states('sensor.kryptex_gain_quai') | float * states('sensor.kryptex_prix_quai') | float %}
-          {% set ns = namespace(extra=0) %}
-          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}
-            {% for t in (state_attr('sensor.kryptex_gain_quai', 'mergemining') or '').split(',') | map('trim') | map('lower') | reject('eq', '') %}
-              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0) * states('sensor.kryptex_prix_' ~ t) | float(0) %}
-            {% endfor %}
-          {% endif %}
-          {{ (own + ns.extra) | round(5) }}
+          {{ (states('sensor.kryptex_gain_quai') | float * states('sensor.kryptex_prix_quai') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_quai') | is_number and states('sensor.kryptex_prix_quai') | is_number }}
-        attributes:
-          gain_propre: >-
-            {{ (states('sensor.kryptex_gain_quai') | float(0) * states('sensor.kryptex_prix_quai') | float(0)) | round(5) }}
-          minage_fusionne: >-
-            {{ state_attr('sensor.kryptex_gain_quai', 'mergemining') or '' }}
 
       - name: "Meilleur coin SHA256 (Kryptex)"
         unique_id: kryptex_best_sha256

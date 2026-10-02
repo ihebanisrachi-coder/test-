@@ -1,25 +1,20 @@
 # Carte « Coin SHA-256 le plus rentable (Kryptex) » pour un tableau de bord Home Assistant.
 # Tableau de bord > Modifier > Ajouter une carte > Manuel, puis collez ce contenu.
-type: vertical-stack
-cards:
-  - type: markdown
-    title: Coin SHA-256 le plus rentable (Kryptex)
-    content: |-
-      {% set best = 'sensor.meilleur_coin_sha256_kryptex' -%}
-      {% if states(best) not in ['unknown', 'unavailable'] -%}
-      ## {{ states(best) }}
-      **{{ states('sensor.gain_du_meilleur_coin_sha256') | float(0) | round(4) }} USD** par jour pour 1 TH/s
+type: markdown
+title: Coin SHA-256 le plus rentable (Kryptex)
+content: |-
+  {% set best = 'sensor.meilleur_coin_sha256_kryptex' -%}
+  {% if states(best) not in ['unknown', 'unavailable'] -%}
+  ## {{ states(best) }}
+  **{{ states('sensor.gain_du_meilleur_coin_sha256') | float(0) | round(4) }} USD** par jour pour 1 TH/s
 
-      {% for line in state_attr(best, 'classement') or [] -%}
-      - {{ line }}
-      {% endfor %}
-      {%- set missing = state_attr(best, 'indisponibles') or [] -%}
-      {% if missing %}
-      _Sans estimation : {{ missing | join(', ') }}_
-      {%- endif %}
-      {%- else -%}
-      Aucune donnée Kryptex pour le moment.
-      {%- endif %}
-  - type: entities
-    entities:
-      - entity: input_boolean.kryptex_include_merged
+  {% for line in state_attr(best, 'classement') or [] -%}
+  - {{ line }}
+  {% endfor %}
+  {%- set missing = state_attr(best, 'indisponibles') or [] -%}
+  {% if missing %}
+  _Sans estimation : {{ missing | join(', ') }}_
+  {%- endif %}
+  {%- else -%}
+  Aucune donnée Kryptex pour le moment.
+  {%- endif %}

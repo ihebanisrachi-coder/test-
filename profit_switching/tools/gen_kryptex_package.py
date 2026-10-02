@@ -32,15 +32,12 @@ HEADER = """\
 # configuration.yaml :  homeassistant: { packages: !include_dir_named packages }), puis redémarrez.
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
-# `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix.
+# `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
 # Le Quai n'a pas d'estimation chez Kryptex (null) : il reste « indisponible » et n'entre pas dans le
 # classement tant que Kryptex n'en publie pas une.
-
-input_boolean:
-  kryptex_include_merged:
-    name: "Kryptex : compter le minage fusionné"
-    icon: mdi:call-merge
-    initial: true   # BTC + FB : le pool BTC de Kryptex annonce `mergemining: FB`
+#
+# Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
+# Kryptex) n'est pas ajouté, pour ne pas surestimer.
 """
 
 GAIN = (
@@ -72,7 +69,6 @@ def rest() -> str:
             f'        value_template: "{GAIN}"',
             "        json_attributes:",
             "          - fee",
-            "          - mergemining",
             f"  - resource: https://pool.kryptex.com/api/v1/coin/{slug}/price/chart",
             "    scan_interval: 1800   # la courbe a un point par heure",
             "    sensor:",
@@ -93,23 +89,9 @@ def per_coin_templates() -> str:
             f"        unique_id: kryptex_profit_{cid}",
             '        unit_of_measurement: "USD/TH/jour"',
             "        state: >-",
-            f"          {{% set own = states('{gain}') | float * states('{price}') | float %}}",
-            "          {% set ns = namespace(extra=0) %}",
-            "          {% if is_state('input_boolean.kryptex_include_merged', 'on') %}",
-            f"            {{% for t in (state_attr('{gain}', 'mergemining') or '').split(',')"
-            " | map('trim') | map('lower') | reject('eq', '') %}",
-            "              {% set ns.extra = ns.extra + states('sensor.kryptex_gain_' ~ t) | float(0)"
-            " * states('sensor.kryptex_prix_' ~ t) | float(0) %}",
-            "            {% endfor %}",
-            "          {% endif %}",
-            "          {{ (own + ns.extra) | round(5) }}",
+            f"          {{{{ (states('{gain}') | float * states('{price}') | float) | round(5) }}}}",
             "        availability: >-",
             f"          {{{{ states('{gain}') | is_number and states('{price}') | is_number }}}}",
-            "        attributes:",
-            "          gain_propre: >-",
-            f"            {{{{ (states('{gain}') | float(0) * states('{price}') | float(0)) | round(5) }}}}",
-            "          minage_fusionne: >-",
-            f"            {{{{ state_attr('{gain}', 'mergemining') or '' }}}}",
         ]
     return "\n".join(out)
 

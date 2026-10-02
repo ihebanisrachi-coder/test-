@@ -61,11 +61,9 @@ coins `indisponibles` et `usd_th_jour` ; `Gain du meilleur coin SHA256` donne sa
 sort du classement sans bloquer les autres. Les gains sont rafraîchis toutes les 10 minutes, les prix toutes
 les 30 minutes.
 
-**Minage fusionné.** Le pool BTC de Kryptex annonce `mergemining: FB` : miner du BTC y rapporte aussi du FB
-(Fractal Bitcoin). Par défaut, le FB est ajouté à la rentabilité du BTC ; l'interrupteur
-`Kryptex : compter le minage fusionné` le retire. C'est elle qui décide du classement : avec le FB le BTC
-passe en tête, sans lui c'est le BSV. Je n'ai pas pu confirmer que Kryptex crédite ce FB en plus de
-`estimated_profit_day`, qui ne contient que du BTC : si vous voyez que non, éteignez l'interrupteur.
+**Minage fusionné non compté.** Le pool BTC de Kryptex annonce `mergemining: FB` (minage fusionné avec
+Fractal Bitcoin). Ce gain **n'est pas ajouté** : chaque coin est évalué sur son seul `estimated_profit_day`,
+pour ne pas surestimer. Avec ces chiffres, le classement place le BSV devant le BTC.
 
 **Quai.** Kryptex ne publie pas d'estimation pour le Quai (`null`) : il est affiché comme indisponible et
 n'entre pas dans le classement. Il reste comparable via K1Pool avec le package `pool_profit.yaml`.
