@@ -145,9 +145,19 @@ async def _settle(hass: HomeAssistant, freezer) -> None:
         await hass.async_block_till_done()
 
 
-def _expected(coin: str) -> float:
-    """USD per TH/s per day: the coin's own gain x its price, nothing else."""
-    return POOL_INFO[coin]["estimated_profit_day"] * 1e12 * PRICES[coin]
+def _expected(coin: str, *, fee_btc: float = 2.5, fee_bch: float = 2.0, autoexchange: float = 0.0) -> float:
+    """USD per TH/s per day, by payment route.
+
+    Kryptex's estimate is net of Kryptex's own fee. BTC is mined at f2pool and BCH at tpool: the gross
+    figure is rebuilt and their own fee applied. The other coins go through Kryptex's autoexchange.
+    """
+    info = POOL_INFO[coin]
+    net_at_kryptex = info["estimated_profit_day"] * 1e12 * PRICES[coin]
+    if coin == "btc":
+        return net_at_kryptex / (1 - info["fee"]) * (1 - fee_btc / 100)
+    if coin == "bch":
+        return net_at_kryptex / (1 - info["fee"]) * (1 - fee_bch / 100)
+    return net_at_kryptex * (1 - autoexchange / 100)
 
 
 @pytest.fixture
@@ -238,6 +248,72 @@ def test_the_two_pools_agree_on_the_network_difficulty() -> None:
     assert kryptex_hashes == pytest.approx(K1POOL_STATS["networkDiff"], rel=0.10)
 
 
+async def _set_helper(hass, freezer, name: str, value: float) -> None:
+    await hass.services.async_call(
+        "input_number", "set_value", {"entity_id": f"input_number.{name}", "value": value}, blocking=True
+    )
+    await _settle(hass, freezer)
+
+
+# The sensors round to 5 decimals: compare with an absolute tolerance of that order.
+def _profit(hass, coin: str) -> float:
+    return float(hass.states.get(f"sensor.kryptex_rentabilite_{coin}").state)
+
+
+async def test_btc_and_bch_use_the_fee_of_the_pool_really_used_not_kryptexs(hass, setup, freezer) -> None:
+    # Kryptex's estimate already contains ITS 3 % fee: it is removed, then f2pool's / tpool's is applied
+    assert _profit(hass, "btc") == pytest.approx(_expected("btc"), abs=2e-5)
+    assert _profit(hass, "bch") == pytest.approx(_expected("bch"), abs=2e-5)
+
+    await _set_helper(hass, freezer, "kryptex_fee_btc", 4.0)
+    await _set_helper(hass, freezer, "kryptex_fee_bch", 0.5)
+
+    assert _profit(hass, "btc") == pytest.approx(_expected("btc", fee_btc=4.0), abs=2e-5)
+    assert _profit(hass, "bch") == pytest.approx(_expected("bch", fee_bch=0.5), abs=2e-5)
+
+
+async def test_autoexchange_fee_applies_to_the_kryptex_routed_coins_only(hass, setup, freezer) -> None:
+    before = {c: _profit(hass, c) for c in ("btc", "bch", "bsv", "dgb", "fb", "xec")}
+    quai_before = float(hass.states.get(QUAI).state)
+
+    await _set_helper(hass, freezer, "kryptex_autoexchange_fee", 10.0)
+
+    for coin in ("bsv", "dgb", "fb", "xec"):
+        assert _profit(hass, coin) == pytest.approx(before[coin] * 0.9, abs=2e-5), coin
+    for coin in ("btc", "bch"):  # not paid through autoexchange
+        assert _profit(hass, coin) == pytest.approx(before[coin], abs=2e-5), coin
+    assert float(hass.states.get(QUAI).state) == pytest.approx(quai_before, abs=2e-5)
+
+
+async def test_a_high_autoexchange_fee_can_change_the_winner(hass, setup, freezer) -> None:
+    assert hass.states.get(BEST).state == "BSV"
+
+    await _set_helper(hass, freezer, "kryptex_autoexchange_fee", 10.0)
+
+    assert hass.states.get(BEST).state == "QUAI"  # paid by K1Pool: untouched by the exchange fee
+
+
+async def test_each_coin_is_labelled_with_its_payment_route(hass, setup) -> None:
+    assert hass.states.get(BEST).attributes["voies"] == {
+        "BTC": "f2pool",
+        "BCH": "tpool",
+        "FB": "Kryptex (autoexchange)",
+        "XEC": "Kryptex (autoexchange)",
+        "DGB": "Kryptex (autoexchange)",
+        "BSV": "Kryptex (autoexchange)",
+        "QUAI": "K1Pool",
+    }
+
+
+async def test_btc_is_unavailable_when_kryptexs_fee_is_unknown(hass, setup, freezer) -> None:
+    """The gross figure cannot be rebuilt without the fee Kryptex deducted."""
+    hass.states.async_set("sensor.kryptex_gain_btc", hass.states.get("sensor.kryptex_gain_btc").state)
+    await _settle(hass, freezer)
+
+    assert hass.states.get("sensor.kryptex_rentabilite_btc").state == "unavailable"
+    assert "BTC" in hass.states.get(BEST).attributes["indisponibles"]
+
+
 async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
     hass, setup, freezer
 ) -> None:
@@ -273,7 +349,8 @@ async def test_the_dashboard_card_shows_the_winner_and_the_ranking(hass, setup) 
     assert "USD** par jour pour 1 TH/s" in text
     lines = [line for line in text.splitlines() if line.startswith("- ")]
     assert [line[2:].split(" = ")[0] for line in lines][:3] == ["BSV", "QUAI", "BTC"]
-    assert "- QUAI = " in text
+    assert "- QUAI = " in text and "(K1Pool)" in text
+    assert "(f2pool)" in text and "(Kryptex (autoexchange))" in text
     assert "Sans estimation" not in text
 
 

@@ -21,6 +21,18 @@ COINS = [
     ("bsv", "bsv", "BSV"),
 ]
 
+# How each coin is really mined when it is NOT paid through Kryptex's autoexchange:
+# id -> (pool name, helper id holding that pool's fee in %, default fee in %).
+# Kryptex's `estimated_profit_day` is net of ITS OWN fee, so for these coins the gross figure is rebuilt
+# (divided by 1 - Kryptex fee) and the fee of the pool actually used is applied instead. The defaults
+# are assumptions: set the real fees in Home Assistant (and in `initial:` to keep them).
+ROUTES = {
+    "btc": ("f2pool", "kryptex_fee_btc", 2.5),
+    "bch": ("tpool", "kryptex_fee_bch", 2.0),
+}
+AUTOEXCHANGE = "Kryptex (autoexchange)"
+AUTOEXCHANGE_FEE_HELPER = "kryptex_autoexchange_fee"
+
 # Kryptex publishes no estimate for Quai (null): it is computed from K1Pool's network figures, inside
 # this same package (own sensors and own calibration knob, named k1pool_*), and joins the ranking.
 QUAI_ENTITY = "sensor.k1pool_rentabilite_quai"
@@ -44,18 +56,42 @@ HEADER = """\
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
+#
+# VOIES DE PAIEMENT. Le BTC est miné chez f2pool, le BCH chez tpool et le Quai chez K1Pool ; les autres coins
+# passent par l'autoexchange de Kryptex. L'estimation de Kryptex étant nette de SES frais, pour le BTC et le
+# BCH on reconstruit le gain brut puis on applique les frais du pool réellement utilisé ; pour les coins en
+# autoexchange on applique les frais d'autoexchange. Les valeurs par défaut sont des hypothèses : réglez les
+# vrais frais (entrées ci-dessous).
 
-# Remis à cette valeur à chaque redémarrage de Home Assistant : écrivez ici la valeur calibrée.
-input_number:
-  k1pool_quai_factor:
-    name: "Quai (K1Pool) : correction du gain"
-    icon: mdi:tune
-    min: 0.1
-    max: 10
-    step: 0.05
-    initial: 1
-    mode: box
+# Remis à ces valeurs à chaque redémarrage de Home Assistant : écrivez ici les valeurs réglées.
 """
+
+def helpers() -> str:
+    def block(key: str, name: str, step: float, default: float, low: float, high: float, icon: str,
+              unit: str | None = "%") -> str:
+        lines = [
+            f"  {key}:",
+            f'    name: "{name}"',
+            f"    icon: {icon}",
+            f"    min: {low}",
+            f"    max: {high}",
+            f"    step: {step}",
+            f"    initial: {default}",
+        ]
+        if unit:
+            lines.append(f'    unit_of_measurement: "{unit}"')
+        return "\n".join(lines + ["    mode: box"])
+
+    out = [
+        "input_number:",
+        block("k1pool_quai_factor", "Quai (K1Pool) : correction du gain", 0.05, 1, 0.1, 10, "mdi:tune", None),
+        block(AUTOEXCHANGE_FEE_HELPER, "Kryptex : frais d'autoexchange", 0.1, 0, 0, 10, "mdi:percent"),
+    ]
+    for cid, (pool, helper, default) in ROUTES.items():
+        label = next(lab for _s, c, lab in COINS if c == cid)
+        out.append(block(helper, f"Frais {pool} ({label})", 0.1, default, 0, 10, "mdi:percent"))
+    return "\n".join(out)
+
 
 GAIN = (
     "{% if value_json.estimated_profit_day is number %}"
@@ -121,14 +157,36 @@ def per_coin_templates() -> str:
     out = []
     for _slug, cid, label in COINS:
         gain, price = f"sensor.kryptex_gain_{cid}", f"sensor.kryptex_prix_{cid}"
+        if cid in ROUTES:
+            _pool, helper, _default = ROUTES[cid]
+            fee_helper = f"input_number.{helper}"
+            # gross = Kryptex's net estimate / (1 - Kryptex fee), then the fee of the pool really used
+            value = (
+                f"(states('{gain}') | float / (1 - state_attr('{gain}', 'fee') | float)"
+                f" * states('{price}') | float * (1 - states('{fee_helper}') | float / 100))"
+            )
+            ready = (
+                f"states('{gain}') | is_number and states('{price}') | is_number"
+                f" and state_attr('{gain}', 'fee') | is_number and states('{fee_helper}') | is_number"
+            )
+        else:
+            fee_helper = f"input_number.{AUTOEXCHANGE_FEE_HELPER}"
+            value = (
+                f"(states('{gain}') | float * states('{price}') | float"
+                f" * (1 - states('{fee_helper}') | float / 100))"
+            )
+            ready = (
+                f"states('{gain}') | is_number and states('{price}') | is_number"
+                f" and states('{fee_helper}') | is_number"
+            )
         out += [
             f'      - name: "Kryptex rentabilité {label}"',
             f"        unique_id: kryptex_profit_{cid}",
             '        unit_of_measurement: "USD/TH/jour"',
             "        state: >-",
-            f"          {{{{ (states('{gain}') | float * states('{price}') | float) | round(5) }}}}",
+            f"          {{{{ {value} | round(5) }}}}",
             "        availability: >-",
-            f"          {{{{ states('{gain}') | is_number and states('{price}') | is_number }}}}",
+            f"          {{{{ {ready} }}}}",
         ]
     out += [
         '      - name: "K1Pool rentabilité Quai"',
@@ -154,6 +212,9 @@ def best_templates() -> str:
     }
     mapping = "{" + ", ".join(f"'{k}': '{v}'" for k, v in sources.items()) + "}"
     labels = ", ".join(f"'{label}'" for label in sources)
+    route_of = {label: ROUTES[cid][0] if cid in ROUTES else AUTOEXCHANGE for _s, cid, label in COINS}
+    route_of["QUAI"] = "K1Pool"
+    routes = "{" + ", ".join(f"'{k}': '{v}'" for k, v in route_of.items()) + "}"
     rows = ROWS.replace("@SOURCES@", mapping)
     indented = "\n".join("          " + line for line in rows.splitlines())
     attr = "\n".join("            " + line for line in rows.splitlines())
@@ -176,6 +237,8 @@ def best_templates() -> str:
             {{% set out = namespace(lines=[]) %}}
             {{% for r in rows %}}{{% set out.lines = out.lines + [r.coin ~ ' = ' ~ (r.usd | round(5))] %}}{{% endfor %}}
             {{{{ out.lines }}}}
+          voies: >-
+            {{{{ {routes} }}}}
           indisponibles: >-
             {{% set ok = namespace(coins=[]) %}}
             {{% for c, entity in {mapping}.items() %}}
@@ -195,6 +258,8 @@ def best_templates() -> str:
 def render() -> str:
     return (
         HEADER
+        + helpers()
+        + "\n"
         + rest()
         + "\n\n# --- Rentabilité par coin, puis classement --------------------------------------------"
         + "\ntemplate:\n  - sensor:\n"

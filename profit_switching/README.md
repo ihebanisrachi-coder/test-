@@ -65,6 +65,23 @@ les 30 minutes.
 Fractal Bitcoin). Ce gain **n'est pas ajouté** : chaque coin est évalué sur son seul `estimated_profit_day`,
 pour ne pas surestimer. Avec ces chiffres, le classement place le BSV devant le BTC.
 
+**Voies de paiement et frais.** Le gain affiché dépend de la façon dont chaque coin est réellement miné.
+L'estimation de Kryptex (`estimated_profit_day`) est nette de **ses propres** frais ; le package en tient compte :
+
+| Coin | Voie | Calcul |
+|---|---|---|
+| BTC | f2pool | gain brut reconstitué (estimation ÷ (1 − frais Kryptex)), puis frais f2pool |
+| BCH | tpool | idem, avec les frais de tpool |
+| Quai | K1Pool | calcul depuis K1Pool, frais lus dans l'API (2 %) |
+| FB, XEC, DGB, BSV | autoexchange de Kryptex | estimation Kryptex, puis frais d'autoexchange |
+
+Les frais se règlent dans Home Assistant : `Frais f2pool (BTC)`, `Frais tpool (BCH)` et
+`Kryptex : frais d'autoexchange`. **Leurs valeurs par défaut sont des hypothèses de ma part** (2,5 %, 2 % et
+0 %) : mettez les vrais frais, et écrivez-les dans les lignes `initial:` du fichier pour qu'ils survivent à un
+redémarrage. L'attribut `voies` du capteur `Meilleur coin SHA256 (Kryptex)` indique la voie de chaque coin, et
+la carte l'affiche à côté de chaque ligne du classement. Le gain du BCH chez tpool est estimé à partir des
+chiffres du réseau de Kryptex : tpool n'a pas été interrogé.
+
 **Quai, depuis K1Pool, dans ce même package.** Kryptex ne publie pas d'estimation pour le Quai (`null`). Le
 package le calcule donc depuis K1Pool (`https://k1pool.com/api/stats/quaisha256`) avec la formule standard du
 minage : récompense par bloc × (1 TH/s × 86 400 s) ÷ difficulté du réseau, × le prix du Quai, frais du pool

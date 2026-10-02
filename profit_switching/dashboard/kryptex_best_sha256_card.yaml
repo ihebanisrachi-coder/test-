@@ -9,7 +9,7 @@ content: |-
   **{{ states('sensor.gain_du_meilleur_coin_sha256') | float(0) | round(4) }} USD** par jour pour 1 TH/s
 
   {% for line in state_attr(best, 'classement') or [] -%}
-  - {{ line }}
+  - {{ line }} ({{ (state_attr(best, 'voies') or {}).get(line.split(' = ')[0], '?') }})
   {% endfor %}
   {%- set missing = state_attr(best, 'indisponibles') or [] -%}
   {% if missing %}

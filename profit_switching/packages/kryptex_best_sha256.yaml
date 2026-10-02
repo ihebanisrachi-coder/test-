@@ -16,8 +16,14 @@
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
+#
+# VOIES DE PAIEMENT. Le BTC est miné chez f2pool, le BCH chez tpool et le Quai chez K1Pool ; les autres coins
+# passent par l'autoexchange de Kryptex. L'estimation de Kryptex étant nette de SES frais, pour le BTC et le
+# BCH on reconstruit le gain brut puis on applique les frais du pool réellement utilisé ; pour les coins en
+# autoexchange on applique les frais d'autoexchange. Les valeurs par défaut sont des hypothèses : réglez les
+# vrais frais (entrées ci-dessous).
 
-# Remis à cette valeur à chaque redémarrage de Home Assistant : écrivez ici la valeur calibrée.
+# Remis à ces valeurs à chaque redémarrage de Home Assistant : écrivez ici les valeurs réglées.
 input_number:
   k1pool_quai_factor:
     name: "Quai (K1Pool) : correction du gain"
@@ -26,6 +32,33 @@ input_number:
     max: 10
     step: 0.05
     initial: 1
+    mode: box
+  kryptex_autoexchange_fee:
+    name: "Kryptex : frais d'autoexchange"
+    icon: mdi:percent
+    min: 0
+    max: 10
+    step: 0.1
+    initial: 0
+    unit_of_measurement: "%"
+    mode: box
+  kryptex_fee_btc:
+    name: "Frais f2pool (BTC)"
+    icon: mdi:percent
+    min: 0
+    max: 10
+    step: 0.1
+    initial: 2.5
+    unit_of_measurement: "%"
+    mode: box
+  kryptex_fee_bch:
+    name: "Frais tpool (BCH)"
+    icon: mdi:percent
+    min: 0
+    max: 10
+    step: 0.1
+    initial: 2.0
+    unit_of_measurement: "%"
     mode: box
 
 # --- Données Kryptex ---------------------------------------------------------------
@@ -146,44 +179,44 @@ template:
         unique_id: kryptex_profit_btc
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_btc') | float * states('sensor.kryptex_prix_btc') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_btc') | float / (1 - state_attr('sensor.kryptex_gain_btc', 'fee') | float) * states('sensor.kryptex_prix_btc') | float * (1 - states('input_number.kryptex_fee_btc') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_btc') | is_number and states('sensor.kryptex_prix_btc') | is_number }}
+          {{ states('sensor.kryptex_gain_btc') | is_number and states('sensor.kryptex_prix_btc') | is_number and state_attr('sensor.kryptex_gain_btc', 'fee') | is_number and states('input_number.kryptex_fee_btc') | is_number }}
       - name: "Kryptex rentabilité BCH"
         unique_id: kryptex_profit_bch
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_bch') | float * states('sensor.kryptex_prix_bch') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_bch') | float / (1 - state_attr('sensor.kryptex_gain_bch', 'fee') | float) * states('sensor.kryptex_prix_bch') | float * (1 - states('input_number.kryptex_fee_bch') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_bch') | is_number and states('sensor.kryptex_prix_bch') | is_number }}
+          {{ states('sensor.kryptex_gain_bch') | is_number and states('sensor.kryptex_prix_bch') | is_number and state_attr('sensor.kryptex_gain_bch', 'fee') | is_number and states('input_number.kryptex_fee_bch') | is_number }}
       - name: "Kryptex rentabilité FB"
         unique_id: kryptex_profit_fb
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_fb') | float * states('sensor.kryptex_prix_fb') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_fb') | float * states('sensor.kryptex_prix_fb') | float * (1 - states('input_number.kryptex_autoexchange_fee') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_fb') | is_number and states('sensor.kryptex_prix_fb') | is_number }}
+          {{ states('sensor.kryptex_gain_fb') | is_number and states('sensor.kryptex_prix_fb') | is_number and states('input_number.kryptex_autoexchange_fee') | is_number }}
       - name: "Kryptex rentabilité XEC"
         unique_id: kryptex_profit_xec
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_xec') | float * states('sensor.kryptex_prix_xec') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_xec') | float * states('sensor.kryptex_prix_xec') | float * (1 - states('input_number.kryptex_autoexchange_fee') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_xec') | is_number and states('sensor.kryptex_prix_xec') | is_number }}
+          {{ states('sensor.kryptex_gain_xec') | is_number and states('sensor.kryptex_prix_xec') | is_number and states('input_number.kryptex_autoexchange_fee') | is_number }}
       - name: "Kryptex rentabilité DGB"
         unique_id: kryptex_profit_dgb
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_dgb') | float * states('sensor.kryptex_prix_dgb') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_dgb') | float * states('sensor.kryptex_prix_dgb') | float * (1 - states('input_number.kryptex_autoexchange_fee') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_dgb') | is_number and states('sensor.kryptex_prix_dgb') | is_number }}
+          {{ states('sensor.kryptex_gain_dgb') | is_number and states('sensor.kryptex_prix_dgb') | is_number and states('input_number.kryptex_autoexchange_fee') | is_number }}
       - name: "Kryptex rentabilité BSV"
         unique_id: kryptex_profit_bsv
         unit_of_measurement: "USD/TH/jour"
         state: >-
-          {{ (states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float) | round(5) }}
+          {{ (states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float * (1 - states('input_number.kryptex_autoexchange_fee') | float / 100)) | round(5) }}
         availability: >-
-          {{ states('sensor.kryptex_gain_bsv') | is_number and states('sensor.kryptex_prix_bsv') | is_number }}
+          {{ states('sensor.kryptex_gain_bsv') | is_number and states('sensor.kryptex_prix_bsv') | is_number and states('input_number.kryptex_autoexchange_fee') | is_number }}
       - name: "K1Pool rentabilité Quai"
         unique_id: k1pool_profit_quai
         unit_of_measurement: "USD/TH/jour"
@@ -236,6 +269,8 @@ template:
             {% set out = namespace(lines=[]) %}
             {% for r in rows %}{% set out.lines = out.lines + [r.coin ~ ' = ' ~ (r.usd | round(5))] %}{% endfor %}
             {{ out.lines }}
+          voies: >-
+            {{ {'BTC': 'f2pool', 'BCH': 'tpool', 'FB': 'Kryptex (autoexchange)', 'XEC': 'Kryptex (autoexchange)', 'DGB': 'Kryptex (autoexchange)', 'BSV': 'Kryptex (autoexchange)', 'QUAI': 'K1Pool'} }}
           indisponibles: >-
             {% set ok = namespace(coins=[]) %}
             {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.k1pool_rentabilite_quai'}.items() %}
