@@ -9,7 +9,7 @@ Projet **indépendant** de l'intégration Vnish du dépôt (`custom_components/v
 
 | Fichier | Rôle | Dépend de |
 |---|---|---|
-| [`packages/kryptex_best_sha256.yaml`](packages/kryptex_best_sha256.yaml) | Classe tous les coins SHA-256 de Kryptex par rentabilité (USD/TH/jour) et affiche le meilleur | Rien (aucun mineur) |
+| [`packages/kryptex_best_sha256.yaml`](packages/kryptex_best_sha256.yaml) | Classe les coins SHA-256 de Kryptex et le Quai (K1Pool) par rentabilité (USD/TH/jour) et affiche le meilleur | Rien (aucun mineur, aucun autre package) |
 | [`dashboard/kryptex_best_sha256_card.yaml`](dashboard/kryptex_best_sha256_card.yaml) | Carte de tableau de bord pour l'afficher | Le package ci-dessus |
 | [`packages/pool_profit.yaml`](packages/pool_profit.yaml) | Lit les API Kryptex, K1Pool et CoinGecko ; calcule les capteurs `Rentabilité BTC / BSV / Quai` et `Meilleur pool` | Rien (aucun mineur) |
 | [`packages/pool_profit_switch.yaml`](packages/pool_profit_switch.yaml) | Automatisation qui bascule le pool actif | Le premier package, et l'intégration Vnish (3 entités à renseigner) |
@@ -50,7 +50,7 @@ Numéros de pool = position dans la table de pools du mineur : par défaut 1 = B
 Installez `packages/kryptex_best_sha256.yaml` (même procédure : `config/packages/`, puis redémarrage) et,
 si vous voulez l'afficher, collez `dashboard/kryptex_best_sha256_card.yaml` dans une carte manuelle.
 
-Pour chaque coin SHA-256 de Kryptex (BTC, BCH, FB, XEC, DGB, BSV) :
+Pour chaque coin SHA-256 de Kryptex (BTC, BCH, FB, XEC, DGB, BSV), puis le Quai depuis K1Pool :
 
 - `Kryptex gain` : coin gagné par TH/s et par jour, frais du pool déduits (`estimated_profit_day`) ;
 - `Kryptex prix` : dernier point de la courbe de prix de Kryptex, en USD (un point par heure) ;
@@ -65,11 +65,22 @@ les 30 minutes.
 Fractal Bitcoin). Ce gain **n'est pas ajouté** : chaque coin est évalué sur son seul `estimated_profit_day`,
 pour ne pas surestimer. Avec ces chiffres, le classement place le BSV devant le BTC.
 
-**Quai, depuis K1Pool.** Kryptex ne publie pas d'estimation pour le Quai (`null`). Le classement le reprend donc
-du capteur `Rentabilité Quai` du package `pool_profit.yaml` (calculé depuis K1Pool, frais du pool déduits).
-**Installez aussi `pool_profit.yaml`** pour que le Quai apparaisse ; sans lui, le Quai est simplement indiqué
-« sans estimation » et les autres coins se classent normalement. Le réglage `Correction du gain Quai` de ce
-package s'applique, et c'est lui qui décide de la place du Quai : voir « À calibrer » plus bas.
+**Quai, depuis K1Pool, dans ce même package.** Kryptex ne publie pas d'estimation pour le Quai (`null`). Le
+package le calcule donc depuis K1Pool (`https://k1pool.com/api/stats/quaisha256`) : récompense par bloc ×
+blocs par jour ÷ hashrate du réseau, × le prix du Quai, frais du pool déduits. Capteurs : `K1Pool gain Quai`
+(QUAI par TH/s et par jour, brut) et `K1Pool rentabilité Quai` (USD par TH/s et par jour). Aucun autre
+package n'est nécessaire.
+
+**À calibrer : le Quai.** Les deux pools ne s'accordent pas sur le temps de bloc du Quai (K1Pool : 4,8 s,
+Kryptex : 1,13 s), ce qui change l'estimation d'un facteur d'environ 4,3. Avec le calcul de K1Pool, le Quai se
+classe vers le milieu ; avec celui de Kryptex il serait très largement en tête. Le réglage
+`Quai (K1Pool) : correction du gain` sert à caler l'estimation sur vos vrais gains : regardez combien de QUAI
+vous gagnez par jour sur K1Pool (moyenne sur plusieurs jours, le PPLNS fluctue) et réglez-le à
+
+> facteur = (QUAI gagnés par jour ÷ votre hashrate en TH/s) ÷ (valeur de `K1Pool gain Quai` × 0,98)
+
+Ce réglage revient à 1 à chaque redémarrage de Home Assistant : une fois calibré, écrivez sa valeur dans la
+ligne `initial:` du fichier. Tant qu'il reste à 1, la place du Quai est indicative.
 
 Ce sont des gains **estimés** par Kryptex : ils ne tiennent pas compte de la chance, des seuils de retrait
 ni du délai de maturation des récompenses.
@@ -83,7 +94,7 @@ ni du délai de maturation des récompenses.
 | Prix du Quai | K1Pool (`coinPriceUsd`) |
 | Prix du BTC et du BSV | CoinGecko (`bitcoin`, `bitcoin-cash-sv`) : Kryptex n'a pas de prix pour le BSV |
 
-## À calibrer : le gain du Quai
+## À calibrer : le gain du Quai (package `pool_profit.yaml`)
 
 Les deux pools ne s'accordent pas sur le temps de bloc du Quai (K1Pool : 4,8 s, Kryptex : 1,13 s), ce qui
 change l'estimation d'un facteur d'environ 4,3 : le Quai vaudrait environ 56 % du BTC avec le calcul de

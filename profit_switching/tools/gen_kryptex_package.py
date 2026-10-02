@@ -21,10 +21,9 @@ COINS = [
     ("bsv", "bsv", "BSV"),
 ]
 
-# Coins ranked from a sensor of another package: label -> entity id. Kryptex publishes no estimate
-# for Quai (null), so it comes from K1Pool via pool_profit.yaml, which also holds the calibration
-# factor `Correction du gain Quai`. Without that package the coin is simply "indisponible".
-EXTERNAL = {"QUAI": "sensor.rentabilite_quai"}
+# Kryptex publishes no estimate for Quai (null): it is computed from K1Pool's network figures, inside
+# this same package (own sensors and own calibration knob, named k1pool_*), and joins the ranking.
+QUAI_ENTITY = "sensor.k1pool_rentabilite_quai"
 
 HEADER = """\
 # Coin SHA-256 le plus rentable selon Kryptex, en USD par jour pour 1 TH/s (frais du pool déduits).
@@ -37,17 +36,36 @@ HEADER = """\
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
 # `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
-# Le Quai n'a pas d'estimation chez Kryptex (null) : il est repris de K1Pool, depuis le capteur
-# `Rentabilité Quai` du package pool_profit.yaml (à installer aussi pour l'inclure ; sinon il est simplement
-# « indisponible »). Il y est corrigé par le réglage `Correction du gain Quai`.
+# Le Quai n'a pas d'estimation chez Kryptex (null) : il est calculé depuis K1Pool (récompense x blocs par
+# jour / hashrate du réseau, frais déduits) par les capteurs `K1Pool gain Quai` et `K1Pool rentabilité Quai`,
+# et corrigé par `Quai (K1Pool) : correction du gain`. ATTENTION : les pools ne s'accordent pas sur le temps
+# de bloc du Quai (écart d'un facteur ~4,3) : calibrez ce réglage sur vos gains réels (voir le README).
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
+
+# Remis à cette valeur à chaque redémarrage de Home Assistant : écrivez ici la valeur calibrée.
+input_number:
+  k1pool_quai_factor:
+    name: "Quai (K1Pool) : correction du gain"
+    icon: mdi:tune
+    min: 0.1
+    max: 10
+    step: 0.05
+    initial: 1
+    mode: box
 """
 
 GAIN = (
     "{% if value_json.estimated_profit_day is number %}"
     "{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
+)
+K1POOL_GAIN = (
+    "{% set j = value_json %}"
+    "{% if j.coinReward is number and j.coinBlocktime is number and j.networkSpeed is number"
+    " and j.coinBlocktime > 0 and j.networkSpeed > 0 %}"
+    "{{ (j.coinReward * 86400 / j.coinBlocktime * 1e12 / j.networkSpeed) | round(4) }}"
+    "{% else %}unknown{% endif %}"
 )
 PRICE = "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
 
@@ -82,6 +100,20 @@ def rest() -> str:
             '        unit_of_measurement: "USD"',
             f'        value_template: "{PRICE}"',
         ]
+    out += [
+        "",
+        "  # K1Pool : Kryptex n'a pas d'estimation pour le Quai, on la calcule (voir l'en-tête).",
+        "  - resource: https://k1pool.com/api/stats/quaisha256",
+        "    scan_interval: 600",
+        "    sensor:",
+        '      - name: "K1Pool gain Quai"',
+        "        unique_id: k1pool_gain_quai",
+        '        unit_of_measurement: "QUAI/TH/jour"',
+        f'        value_template: "{K1POOL_GAIN}"',
+        "        json_attributes:",
+        "          - coinPriceUsd",
+        "          - coinPoolFee",
+    ]
     return "\n".join(out)
 
 
@@ -98,11 +130,28 @@ def per_coin_templates() -> str:
             "        availability: >-",
             f"          {{{{ states('{gain}') | is_number and states('{price}') | is_number }}}}",
         ]
+    out += [
+        '      - name: "K1Pool rentabilité Quai"',
+        "        unique_id: k1pool_profit_quai",
+        '        unit_of_measurement: "USD/TH/jour"',
+        "        state: >-",
+        "          {{ (states('sensor.k1pool_gain_quai') | float",
+        "              * state_attr('sensor.k1pool_gain_quai', 'coinPriceUsd') | float",
+        "              * (1 - state_attr('sensor.k1pool_gain_quai', 'coinPoolFee') | float / 100)",
+        "              * states('input_number.k1pool_quai_factor') | float) | round(5) }}",
+        "        availability: >-",
+        "          {{ states('sensor.k1pool_gain_quai') | is_number",
+        "             and state_attr('sensor.k1pool_gain_quai', 'coinPriceUsd') | is_number",
+        "             and state_attr('sensor.k1pool_gain_quai', 'coinPoolFee') | is_number",
+        "             and states('input_number.k1pool_quai_factor') | is_number }}",
+    ]
     return "\n".join(out)
 
 
 def best_templates() -> str:
-    sources = {label: f"sensor.kryptex_rentabilite_{cid}" for _s, cid, label in COINS} | EXTERNAL
+    sources = {label: f"sensor.kryptex_rentabilite_{cid}" for _s, cid, label in COINS} | {
+        "QUAI": QUAI_ENTITY
+    }
     mapping = "{" + ", ".join(f"'{k}': '{v}'" for k, v in sources.items()) + "}"
     labels = ", ".join(f"'{label}'" for label in sources)
     rows = ROWS.replace("@SOURCES@", mapping)

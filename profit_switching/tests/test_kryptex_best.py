@@ -21,7 +21,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 ROOT = Path(__file__).parent.parent
 PACKAGE_FILE = ROOT / "packages" / "kryptex_best_sha256.yaml"
 PACKAGE = load_yaml(str(PACKAGE_FILE))
-POOL_PROFIT = load_yaml(str(ROOT / "packages" / "pool_profit.yaml"))
+POOL_PROFIT = load_yaml(str(ROOT / "packages" / "pool_profit.yaml"))  # the other package
 sys.path.insert(0, str(ROOT / "tools"))
 import gen_kryptex_package as generator  # noqa: E402
 
@@ -37,8 +37,10 @@ POOL_INFO = {
 }
 # Kryptex answers `estimated_profit_day: null` for Quai; it is ranked from K1Pool instead.
 QUAI_NULL_ESTIMATE = {"fee": 0.01, "estimated_profit_day": None, "mergemining": ""}
-# What pool_profit.yaml computes from K1Pool for Quai: 2.2574 QUAI/TH x 0.01026545 USD x (1 - 2 %).
+# Quai from K1Pool (real answer in data/k1pool_quai_stats.json): 2.2574 QUAI/TH x 0.01026545 USD x (1 - 2 %).
 QUAI_K1POOL_PROFIT = 0.02271
+K1POOL_STATS = json.loads((Path(__file__).parent / "data" / "k1pool_quai_stats.json").read_text())
+QUAI = "sensor.k1pool_rentabilite_quai"
 # Latest USD price per coin. The real answer is a list of {timestamp, price} points, one per hour;
 # these are made-up "now" values in the same order of magnitude as the real ones.
 PRICES = {"btc": 85000.0, "bch": 245.0, "fb": 0.33, "xec": 6.8e-06, "dgb": 0.0043, "bsv": 22.0}
@@ -93,15 +95,34 @@ async def test_price_is_the_latest_point_of_the_chart_not_the_first(hass) -> Non
 
 def test_every_coin_reads_kryptex_and_exposes_what_the_ranking_needs() -> None:
     resources = [r["resource"] for r in PACKAGE["rest"]]
+    kryptex = [r for r in resources if r.startswith("https://pool.kryptex.com/")]
 
-    assert all(r.startswith("https://pool.kryptex.com/") for r in resources)
     for slug in POOL_INFO:
         assert f"https://pool.kryptex.com/{slug}/api/v1/pool/info" in resources
         assert f"https://pool.kryptex.com/api/v1/coin/{slug}/price/chart" in resources
-    pool_info = _rest("/btc/api/v1/pool/info")
-    assert pool_info["sensor"][0]["json_attributes"] == ["fee"]
-    # Quai is not read from Kryptex (null estimate): it comes from K1Pool, via the other package.
-    assert not [r for r in resources if "quai" in r]
+    # Kryptex answers null for Quai: it is read from K1Pool, and only from there
+    assert not [r for r in kryptex if "quai" in r]
+    assert [r for r in resources if r not in kryptex] == ["https://k1pool.com/api/stats/quaisha256"]
+    assert _rest("/btc/api/v1/pool/info")["sensor"][0]["json_attributes"] == ["fee"]
+
+
+async def test_quai_gain_from_the_real_k1pool_answer(hass) -> None:
+    (sensor,) = _rest("k1pool.com/api/stats/quaisha256")["sensor"]
+
+    gain = await _render(hass, sensor["value_template"], K1POOL_STATS)
+
+    # reward x blocks per day x 1 TH/s / network hashrate
+    assert float(gain) == pytest.approx(2.2574, rel=1e-3)
+    assert sensor["json_attributes"] == ["coinPriceUsd", "coinPoolFee"]
+    assert float(K1POOL_STATS["coinPriceUsd"]) == pytest.approx(0.01026545)  # text in the API
+
+
+@pytest.mark.parametrize("broken", [{}, {"coinBlocktime": 0}, {"networkSpeed": None}])
+async def test_a_broken_k1pool_answer_gives_an_unknown_sensor_not_an_error(hass, broken) -> None:
+    (sensor,) = _rest("k1pool.com/api/stats/quaisha256")["sensor"]
+    answer = {**K1POOL_STATS, **broken} if broken else {}
+
+    assert await _render(hass, sensor["value_template"], answer) == "unknown"
 
 
 # --- 2. Ranking, in Home Assistant -----------------------------------------------------------
@@ -125,7 +146,11 @@ def _expected(coin: str) -> float:
 
 @pytest.fixture
 async def setup(hass: HomeAssistant, freezer):
-    hass.states.async_set("sensor.rentabilite_quai", str(QUAI_K1POOL_PROFIT))
+    hass.states.async_set(
+        "sensor.k1pool_gain_quai",
+        "2.2574",
+        {"coinPriceUsd": K1POOL_STATS["coinPriceUsd"], "coinPoolFee": K1POOL_STATS["coinPoolFee"]},
+    )
     for slug, cid, _label in generator.COINS:
         info = POOL_INFO[slug]
         gain = info["estimated_profit_day"]
@@ -135,7 +160,9 @@ async def setup(hass: HomeAssistant, freezer):
             {"fee": info["fee"]},
         )
         hass.states.async_set(f"sensor.kryptex_prix_{cid}", str(PRICES[cid]))
-    assert await async_setup_component(hass, "template", {"template": PACKAGE["template"]})
+    # Only this package: nothing else is installed.
+    for domain in ("input_number", "template"):
+        assert await async_setup_component(hass, domain, {domain: PACKAGE[domain]})
     await _settle(hass, freezer)
 
 
@@ -162,13 +189,12 @@ async def test_ranking_is_sorted_and_includes_quai_from_k1pool(hass, setup) -> N
 
     names = [line.split(" = ")[0] for line in attrs["classement"]]
     assert names == ["BSV", "BTC", "DGB", "BCH", "QUAI", "FB", "XEC"]
-    assert f"QUAI = {QUAI_K1POOL_PROFIT}" in attrs["classement"]
+    assert float(hass.states.get(QUAI).state) == pytest.approx(QUAI_K1POOL_PROFIT, abs=1e-5)
     assert attrs["indisponibles"] == []
 
 
-async def test_quai_is_unavailable_without_the_k1pool_package(hass, setup, freezer) -> None:
-    """pool_profit.yaml not installed: its sensor does not exist; the others still rank."""
-    hass.states.async_remove("sensor.rentabilite_quai")
+async def test_quai_is_listed_as_unavailable_when_k1pool_has_no_data(hass, setup, freezer) -> None:
+    hass.states.async_set("sensor.k1pool_gain_quai", "unknown")
     await _settle(hass, freezer)
 
     attrs = hass.states.get(BEST).attributes
@@ -177,39 +203,16 @@ async def test_quai_is_unavailable_without_the_k1pool_package(hass, setup, freez
     assert [line.split(" = ")[0] for line in attrs["classement"]] == ["BSV", "BTC", "DGB", "BCH", "FB", "XEC"]
 
 
-async def test_quai_can_win_when_its_k1pool_figure_is_higher(hass, setup, freezer) -> None:
-    hass.states.async_set("sensor.rentabilite_quai", "0.0993")
-    await _settle(hass, freezer)
-
-    assert hass.states.get(BEST).state == "QUAI"
-    assert hass.states.get(BEST).attributes["usd_th_jour"] == pytest.approx(0.0993)
-
-
-async def test_k1pool_data_reaches_the_ranking_through_the_other_package(hass, freezer) -> None:
-    """Both packages together: K1Pool's numbers -> Rentabilité Quai -> classement, and the
-    `Correction du gain Quai` knob of pool_profit.yaml moves Quai in the ranking."""
-    for slug, cid, _label in generator.COINS:
-        info = POOL_INFO[slug]
-        hass.states.async_set(f"sensor.kryptex_gain_{cid}", str(info["estimated_profit_day"] * 1e12))
-        hass.states.async_set(f"sensor.kryptex_prix_{cid}", str(PRICES[cid]))
-    hass.states.async_set(
-        "sensor.gain_brut_quai", "2.2574", {"coinPriceUsd": "0.01026545", "coinPoolFee": 2}
-    )
-    templates = PACKAGE["template"] + POOL_PROFIT["template"]
-    assert await async_setup_component(hass, "input_number", {"input_number": POOL_PROFIT["input_number"]})
-    assert await async_setup_component(hass, "template", {"template": templates})
-    await _settle(hass, freezer)
-
-    attrs = hass.states.get(BEST).attributes
-    assert "QUAI = 0.02271" in attrs["classement"]
-
+async def test_the_quai_correction_knob_moves_quai_in_the_ranking(hass, setup, freezer) -> None:
+    """The two pools disagree by x4.3 on Quai's block time: this knob is how to settle it."""
     await hass.services.async_call(
         "input_number", "set_value",
-        {"entity_id": "input_number.profit_quai_factor", "value": 4.3}, blocking=True,
+        {"entity_id": "input_number.k1pool_quai_factor", "value": 4.3}, blocking=True,
     )
     await _settle(hass, freezer)
 
     assert hass.states.get(BEST).state == "QUAI"
+    assert hass.states.get(BEST).attributes["usd_th_jour"] == pytest.approx(4.3 * QUAI_K1POOL_PROFIT, abs=1e-4)
 
 
 async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
@@ -227,7 +230,7 @@ async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
 async def test_nothing_to_show_when_no_data_at_all(hass, setup, freezer) -> None:
     for _slug, cid, _label in generator.COINS:
         hass.states.async_set(f"sensor.kryptex_prix_{cid}", "unavailable")
-    hass.states.async_remove("sensor.rentabilite_quai")
+    hass.states.async_set("sensor.k1pool_gain_quai", "unavailable")
     await _settle(hass, freezer)
 
     assert hass.states.get(BEST).state == "unavailable"
@@ -254,7 +257,6 @@ async def test_the_dashboard_card_shows_the_winner_and_the_ranking(hass, setup) 
 
 
 async def test_the_dashboard_card_flags_a_coin_without_estimate(hass, setup) -> None:
-    hass.states.async_remove("sensor.rentabilite_quai")
     markdown = load_yaml(str(ROOT / "dashboard" / "kryptex_best_sha256_card.yaml"))["content"]
 
     # the best-coin sensor refreshes with a short delay: render from its last attributes
@@ -283,3 +285,18 @@ def test_the_package_never_mentions_a_miner() -> None:
         assert word not in content, word
     # and nothing about merged mining is left in the data or the templates
     assert "mergemining" not in content and "include_merged" not in content
+
+
+def test_the_package_does_not_depend_on_pool_profit_and_does_not_clash_with_it() -> None:
+    """Install either one, or both: no entity of the other is read, and no id is shared."""
+    content = json.dumps(PACKAGE)
+    for foreign in ("sensor.rentabilite_quai", "profit_quai_factor", "sensor.gain_brut_quai", "sensor.meilleur_pool"):
+        assert foreign not in content, foreign
+
+    def unique_ids(package: dict) -> set[str]:
+        ids = {s["unique_id"] for block in package["rest"] for s in block["sensor"]}
+        ids |= {s["unique_id"] for block in package["template"] for s in block["sensor"]}
+        return ids
+
+    assert not unique_ids(PACKAGE) & unique_ids(POOL_PROFIT)
+    assert not set(PACKAGE["input_number"]) & set(POOL_PROFIT["input_number"])
