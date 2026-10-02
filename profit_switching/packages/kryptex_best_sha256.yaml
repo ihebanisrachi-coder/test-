@@ -8,8 +8,9 @@
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
 # `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
-# Le Quai n'a pas d'estimation chez Kryptex (null) : il reste « indisponible » et n'entre pas dans le
-# classement tant que Kryptex n'en publie pas une.
+# Le Quai n'a pas d'estimation chez Kryptex (null) : il est repris de K1Pool, depuis le capteur
+# `Rentabilité Quai` du package pool_profit.yaml (à installer aussi pour l'inclure ; sinon il est simplement
+# « indisponible »). Il y est corrigé par le réglage `Correction du gain Quai`.
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
@@ -112,22 +113,6 @@ rest:
         unique_id: kryptex_prix_bsv
         unit_of_measurement: "USD"
         value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
-  - resource: https://pool.kryptex.com/quai-sha256/api/v1/pool/info
-    scan_interval: 600
-    sensor:
-      - name: "Kryptex gain QUAI"
-        unique_id: kryptex_gain_quai
-        unit_of_measurement: "QUAI/TH/jour"
-        value_template: "{% if value_json.estimated_profit_day is number %}{{ value_json.estimated_profit_day * 1e12 }}{% else %}unknown{% endif %}"
-        json_attributes:
-          - fee
-  - resource: https://pool.kryptex.com/api/v1/coin/quai-sha256/price/chart
-    scan_interval: 1800   # la courbe a un point par heure
-    sensor:
-      - name: "Kryptex prix QUAI"
-        unique_id: kryptex_prix_quai
-        unit_of_measurement: "USD"
-        value_template: "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"
 
 # --- Rentabilité par coin, puis classement --------------------------------------------
 template:
@@ -174,29 +159,22 @@ template:
           {{ (states('sensor.kryptex_gain_bsv') | float * states('sensor.kryptex_prix_bsv') | float) | round(5) }}
         availability: >-
           {{ states('sensor.kryptex_gain_bsv') | is_number and states('sensor.kryptex_prix_bsv') | is_number }}
-      - name: "Kryptex rentabilité QUAI"
-        unique_id: kryptex_profit_quai
-        unit_of_measurement: "USD/TH/jour"
-        state: >-
-          {{ (states('sensor.kryptex_gain_quai') | float * states('sensor.kryptex_prix_quai') | float) | round(5) }}
-        availability: >-
-          {{ states('sensor.kryptex_gain_quai') | is_number and states('sensor.kryptex_prix_quai') | is_number }}
 
       - name: "Meilleur coin SHA256 (Kryptex)"
         unique_id: kryptex_best_sha256
         icon: mdi:trophy
         state: >-
           {% set ns = namespace(rows=[]) %}
-          {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
-            {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+          {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.rentabilite_quai'}.items() %}
+            {% set v = states(entity) %}
             {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
           {% endfor %}
           {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
           {{ rows[0].coin if rows else 'unknown' }}
         availability: >-
           {% set ns = namespace(rows=[]) %}
-          {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
-            {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+          {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.rentabilite_quai'}.items() %}
+            {% set v = states(entity) %}
             {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
           {% endfor %}
           {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
@@ -204,16 +182,16 @@ template:
         attributes:
           usd_th_jour: >-
             {% set ns = namespace(rows=[]) %}
-            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
-              {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+            {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.rentabilite_quai'}.items() %}
+              {% set v = states(entity) %}
               {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
             {% endfor %}
             {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
             {{ rows[0].usd if rows else none }}
           classement: >-
             {% set ns = namespace(rows=[]) %}
-            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
-              {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+            {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.rentabilite_quai'}.items() %}
+              {% set v = states(entity) %}
               {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
             {% endfor %}
             {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}
@@ -222,8 +200,8 @@ template:
             {{ out.lines }}
           indisponibles: >-
             {% set ok = namespace(coins=[]) %}
-            {% for c in ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] %}
-              {% if states('sensor.kryptex_rentabilite_' ~ c | lower) | is_number %}{% set ok.coins = ok.coins + [c] %}{% endif %}
+            {% for c, entity in {'BTC': 'sensor.kryptex_rentabilite_btc', 'BCH': 'sensor.kryptex_rentabilite_bch', 'FB': 'sensor.kryptex_rentabilite_fb', 'XEC': 'sensor.kryptex_rentabilite_xec', 'DGB': 'sensor.kryptex_rentabilite_dgb', 'BSV': 'sensor.kryptex_rentabilite_bsv', 'QUAI': 'sensor.rentabilite_quai'}.items() %}
+              {% if states(entity) | is_number %}{% set ok.coins = ok.coins + [c] %}{% endif %}
             {% endfor %}
             {{ ['BTC', 'BCH', 'FB', 'XEC', 'DGB', 'BSV', 'QUAI'] | reject('in', ok.coins) | list }}
 

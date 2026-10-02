@@ -19,8 +19,12 @@ COINS = [
     ("xec", "xec", "XEC"),
     ("dgb", "dgb", "DGB"),
     ("bsv", "bsv", "BSV"),
-    ("quai-sha256", "quai", "QUAI"),
 ]
+
+# Coins ranked from a sensor of another package: label -> entity id. Kryptex publishes no estimate
+# for Quai (null), so it comes from K1Pool via pool_profit.yaml, which also holds the calibration
+# factor `Correction du gain Quai`. Without that package the coin is simply "indisponible".
+EXTERNAL = {"QUAI": "sensor.rentabilite_quai"}
 
 HEADER = """\
 # Coin SHA-256 le plus rentable selon Kryptex, en USD par jour pour 1 TH/s (frais du pool déduits).
@@ -33,8 +37,9 @@ HEADER = """\
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
 # `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
-# Le Quai n'a pas d'estimation chez Kryptex (null) : il reste « indisponible » et n'entre pas dans le
-# classement tant que Kryptex n'en publie pas une.
+# Le Quai n'a pas d'estimation chez Kryptex (null) : il est repris de K1Pool, depuis le capteur
+# `Rentabilité Quai` du package pool_profit.yaml (à installer aussi pour l'inclure ; sinon il est simplement
+# « indisponible »). Il y est corrigé par le réglage `Correction du gain Quai`.
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
@@ -49,8 +54,8 @@ PRICE = "{% set last = value_json | last %}{{ last.price if last is mapping else
 # Rows of the ranking, built from the per-coin profit sensors (inlined where it is needed).
 ROWS = """\
 {% set ns = namespace(rows=[]) %}
-{% for c in [@LABELS@] %}
-  {% set v = states('sensor.kryptex_rentabilite_' ~ c | lower) %}
+{% for c, entity in @SOURCES@.items() %}
+  {% set v = states(entity) %}
   {% if v | is_number %}{% set ns.rows = ns.rows + [{'coin': c, 'usd': v | float}] %}{% endif %}
 {% endfor %}
 {% set rows = ns.rows | sort(attribute='usd', reverse=true) %}"""
@@ -97,8 +102,10 @@ def per_coin_templates() -> str:
 
 
 def best_templates() -> str:
-    labels = ", ".join(f"'{label}'" for _s, _c, label in COINS)
-    rows = ROWS.replace("@LABELS@", labels)
+    sources = {label: f"sensor.kryptex_rentabilite_{cid}" for _s, cid, label in COINS} | EXTERNAL
+    mapping = "{" + ", ".join(f"'{k}': '{v}'" for k, v in sources.items()) + "}"
+    labels = ", ".join(f"'{label}'" for label in sources)
+    rows = ROWS.replace("@SOURCES@", mapping)
     indented = "\n".join("          " + line for line in rows.splitlines())
     attr = "\n".join("            " + line for line in rows.splitlines())
     return f"""\
@@ -122,8 +129,8 @@ def best_templates() -> str:
             {{{{ out.lines }}}}
           indisponibles: >-
             {{% set ok = namespace(coins=[]) %}}
-            {{% for c in [{labels}] %}}
-              {{% if states('sensor.kryptex_rentabilite_' ~ c | lower) | is_number %}}{{% set ok.coins = ok.coins + [c] %}}{{% endif %}}
+            {{% for c, entity in {mapping}.items() %}}
+              {{% if states(entity) | is_number %}}{{% set ok.coins = ok.coins + [c] %}}{{% endif %}}
             {{% endfor %}}
             {{{{ [{labels}] | reject('in', ok.coins) | list }}}}
 

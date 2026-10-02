@@ -50,7 +50,7 @@ Numéros de pool = position dans la table de pools du mineur : par défaut 1 = B
 Installez `packages/kryptex_best_sha256.yaml` (même procédure : `config/packages/`, puis redémarrage) et,
 si vous voulez l'afficher, collez `dashboard/kryptex_best_sha256_card.yaml` dans une carte manuelle.
 
-Pour chaque coin SHA-256 de Kryptex (BTC, BCH, FB, XEC, DGB, BSV, Quai) :
+Pour chaque coin SHA-256 de Kryptex (BTC, BCH, FB, XEC, DGB, BSV) :
 
 - `Kryptex gain` : coin gagné par TH/s et par jour, frais du pool déduits (`estimated_profit_day`) ;
 - `Kryptex prix` : dernier point de la courbe de prix de Kryptex, en USD (un point par heure) ;
@@ -65,8 +65,11 @@ les 30 minutes.
 Fractal Bitcoin). Ce gain **n'est pas ajouté** : chaque coin est évalué sur son seul `estimated_profit_day`,
 pour ne pas surestimer. Avec ces chiffres, le classement place le BSV devant le BTC.
 
-**Quai.** Kryptex ne publie pas d'estimation pour le Quai (`null`) : il est affiché comme indisponible et
-n'entre pas dans le classement. Il reste comparable via K1Pool avec le package `pool_profit.yaml`.
+**Quai, depuis K1Pool.** Kryptex ne publie pas d'estimation pour le Quai (`null`). Le classement le reprend donc
+du capteur `Rentabilité Quai` du package `pool_profit.yaml` (calculé depuis K1Pool, frais du pool déduits).
+**Installez aussi `pool_profit.yaml`** pour que le Quai apparaisse ; sans lui, le Quai est simplement indiqué
+« sans estimation » et les autres coins se classent normalement. Le réglage `Correction du gain Quai` de ce
+package s'applique, et c'est lui qui décide de la place du Quai : voir « À calibrer » plus bas.
 
 Ce sont des gains **estimés** par Kryptex : ils ne tiennent pas compte de la chance, des seuils de retrait
 ni du délai de maturation des récompenses.
