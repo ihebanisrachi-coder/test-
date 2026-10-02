@@ -54,8 +54,8 @@ rest:
         json_attributes:
           - fee
 
-  # K1Pool : pas d'estimation toute faite pour le Quai, on la calcule :
-  # récompense par bloc x blocs par jour x (1 TH/s / hashrate du réseau).
+  # K1Pool : pas d'estimation toute faite pour le Quai, on la calcule avec la formule standard :
+  # récompense par bloc x (1 TH/s x 86 400 s) / difficulté du réseau.
   - resource: https://k1pool.com/api/stats/quaisha256
     scan_interval: 600
     sensor:
@@ -63,8 +63,7 @@ rest:
         unique_id: profit_gross_quai
         unit_of_measurement: "QUAI/TH/jour"
         value_template: >-
-          {{ (value_json.coinReward * 86400 / value_json.coinBlocktime * 1e12
-              / value_json.networkSpeed) | round(4) }}
+          {{ (value_json.coinReward * 86400 * 1e12 / value_json.networkDiff) | round(4) }}
         json_attributes:
           - coinPriceUsd
           - coinPoolFee

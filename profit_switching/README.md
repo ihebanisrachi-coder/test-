@@ -66,21 +66,22 @@ Fractal Bitcoin). Ce gain **n'est pas ajouté** : chaque coin est évalué sur s
 pour ne pas surestimer. Avec ces chiffres, le classement place le BSV devant le BTC.
 
 **Quai, depuis K1Pool, dans ce même package.** Kryptex ne publie pas d'estimation pour le Quai (`null`). Le
-package le calcule donc depuis K1Pool (`https://k1pool.com/api/stats/quaisha256`) : récompense par bloc ×
-blocs par jour ÷ hashrate du réseau, × le prix du Quai, frais du pool déduits. Capteurs : `K1Pool gain Quai`
-(QUAI par TH/s et par jour, brut) et `K1Pool rentabilité Quai` (USD par TH/s et par jour). Aucun autre
-package n'est nécessaire.
+package le calcule donc depuis K1Pool (`https://k1pool.com/api/stats/quaisha256`) avec la formule standard du
+minage : récompense par bloc × (1 TH/s × 86 400 s) ÷ difficulté du réseau, × le prix du Quai, frais du pool
+déduits. Capteurs : `K1Pool gain Quai` (QUAI par TH/s et par jour, brut) et `K1Pool rentabilité Quai` (USD par
+TH/s et par jour). Aucun autre package n'est nécessaire.
 
-**À calibrer : le Quai.** Les deux pools ne s'accordent pas sur le temps de bloc du Quai (K1Pool : 4,8 s,
-Kryptex : 1,13 s), ce qui change l'estimation d'un facteur d'environ 4,3. Avec le calcul de K1Pool, le Quai se
-classe vers le milieu ; avec celui de Kryptex il serait très largement en tête. Le réglage
-`Quai (K1Pool) : correction du gain` sert à caler l'estimation sur vos vrais gains : regardez combien de QUAI
-vous gagnez par jour sur K1Pool (moyenne sur plusieurs jours, le PPLNS fluctue) et réglez-le à
+*Pourquoi cette formule.* Une première version utilisait le temps de bloc (4,8 s chez K1Pool, 1,13 s chez
+Kryptex) : les deux pools ne s'accordent pas, ce qui donnait des résultats d'un facteur 4,3 d'écart. La
+difficulté, elle, est la même chez les deux (celle de Kryptex, convertie en hashes, recoupe celle de K1Pool à
+5 % près), et le résultat (environ 0,042 USD/TH/jour) est du même ordre que le BTC et le BSV, comme on s'y attend
+quand le hashrate migre vers le coin le plus rentable. **Elle n'a pas été vérifiée sur vos gains réels.** Pour
+l'affiner, réglez `Quai (K1Pool) : correction du gain` à :
 
 > facteur = (QUAI gagnés par jour ÷ votre hashrate en TH/s) ÷ (valeur de `K1Pool gain Quai` × 0,98)
 
-Ce réglage revient à 1 à chaque redémarrage de Home Assistant : une fois calibré, écrivez sa valeur dans la
-ligne `initial:` du fichier. Tant qu'il reste à 1, la place du Quai est indicative.
+(moyenne sur plusieurs jours, le PPLNS fluctue). Ce réglage revient à 1 à chaque redémarrage de Home Assistant :
+une fois calibré, écrivez sa valeur dans la ligne `initial:` du fichier. Un facteur proche de 1 confirme la formule.
 
 Ce sont des gains **estimés** par Kryptex : ils ne tiennent pas compte de la chance, des seuils de retrait
 ni du délai de maturation des récompenses.
@@ -94,13 +95,10 @@ ni du délai de maturation des récompenses.
 | Prix du Quai | K1Pool (`coinPriceUsd`) |
 | Prix du BTC et du BSV | CoinGecko (`bitcoin`, `bitcoin-cash-sv`) : Kryptex n'a pas de prix pour le BSV |
 
-## À calibrer : le gain du Quai (package `pool_profit.yaml`)
+## Gain du Quai dans `pool_profit.yaml`
 
-Les deux pools ne s'accordent pas sur le temps de bloc du Quai (K1Pool : 4,8 s, Kryptex : 1,13 s), ce qui
-change l'estimation d'un facteur d'environ 4,3 : le Quai vaudrait environ 56 % du BTC avec le calcul de
-K1Pool, 244 % avec celui de Kryptex. Le projet utilise celui de K1Pool. Pour le caler sur la réalité,
-regardez combien de QUAI vous gagnez par jour sur K1Pool (moyenne sur plusieurs jours, le PPLNS fluctue) et
-réglez `Correction du gain Quai` à :
+Le package calcule le Quai de la même façon (formule standard, difficulté du réseau de K1Pool : voir plus haut),
+et son réglage `Correction du gain Quai` sert à l'affiner sur vos gains réels :
 
 > facteur = (QUAI gagnés par jour ÷ votre hashrate en TH/s) ÷ (valeur de `Gain brut Quai` × 0,98)
 

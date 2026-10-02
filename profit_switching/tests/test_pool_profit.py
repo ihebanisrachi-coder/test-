@@ -55,7 +55,7 @@ async def _render(hass: HomeAssistant, template: str, value_json: dict):
     [
         ("/btc/api", "kryptex_btc_pool_info.json", 49.3358),   # sat/TH/day, gross (fee removed)
         ("/bsv/api", "kryptex_bsv_pool_info.json", 205381.1),  # idem
-        ("k1pool.com/api/stats", "k1pool_quai_stats.json", 2.2574),  # QUAI/TH/day, gross
+        ("k1pool.com/api/stats", "k1pool_quai_stats.json", 4.2078),  # QUAI/TH/day, gross, from the network difficulty
     ],
 )
 async def test_gross_yield_from_real_pool_answers(hass, resource, sample, expected) -> None:
@@ -128,6 +128,7 @@ async def setup(hass: HomeAssistant, freezer):
     hass.states.async_set(
         "sensor.gain_brut_quai", "2.2574", {"coinPriceUsd": "0.01026545", "coinPoolFee": 2}
     )
+    # (the Quai figure above is an arbitrary lower value so that BTC wins and switching is exercised)
     hass.states.async_set(SELECT, "3")  # currently mining Quai, since START
     hass.states.async_set(f"switch.{P}_mining", "on")
     hass.states.async_set(f"binary_sensor.{P}_problem", "off")

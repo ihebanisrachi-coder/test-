@@ -36,10 +36,11 @@ HEADER = """\
 #
 # Pour chaque coin : `Kryptex gain` = coin gagné par TH/s et par jour (`estimated_profit_day` x 1e12),
 # `Kryptex prix` = dernier point de la courbe de prix (USD), `Kryptex rentabilité` = gain x prix, sans minage fusionné.
-# Le Quai n'a pas d'estimation chez Kryptex (null) : il est calculé depuis K1Pool (récompense x blocs par
-# jour / hashrate du réseau, frais déduits) par les capteurs `K1Pool gain Quai` et `K1Pool rentabilité Quai`,
-# et corrigé par `Quai (K1Pool) : correction du gain`. ATTENTION : les pools ne s'accordent pas sur le temps
-# de bloc du Quai (écart d'un facteur ~4,3) : calibrez ce réglage sur vos gains réels (voir le README).
+# Le Quai n'a pas d'estimation chez Kryptex (null) : il est calculé depuis K1Pool par les capteurs
+# `K1Pool gain Quai` et `K1Pool rentabilité Quai`. Formule standard de minage : récompense par bloc x
+# (1 TH/s x 86 400 s) / difficulté du réseau, frais du pool déduits. La difficulté de K1Pool recoupe celle de
+# Kryptex à ~5 % près. Elle n'a pas été vérifiée sur des gains réels : affinez-la avec
+# `Quai (K1Pool) : correction du gain` (voir le README).
 #
 # Seul le gain PROPRE de chaque coin est compté : le minage fusionné (par exemple BTC + FB, annoncé par
 # Kryptex) n'est pas ajouté, pour ne pas surestimer.
@@ -62,9 +63,8 @@ GAIN = (
 )
 K1POOL_GAIN = (
     "{% set j = value_json %}"
-    "{% if j.coinReward is number and j.coinBlocktime is number and j.networkSpeed is number"
-    " and j.coinBlocktime > 0 and j.networkSpeed > 0 %}"
-    "{{ (j.coinReward * 86400 / j.coinBlocktime * 1e12 / j.networkSpeed) | round(4) }}"
+    "{% if j.coinReward is number and j.networkDiff is number and j.networkDiff > 0 %}"
+    "{{ (j.coinReward * 86400 * 1e12 / j.networkDiff) | round(4) }}"
     "{% else %}unknown{% endif %}"
 )
 PRICE = "{% set last = value_json | last %}{{ last.price if last is mapping else 'unknown' }}"

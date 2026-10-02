@@ -37,8 +37,10 @@ POOL_INFO = {
 }
 # Kryptex answers `estimated_profit_day: null` for Quai; it is ranked from K1Pool instead.
 QUAI_NULL_ESTIMATE = {"fee": 0.01, "estimated_profit_day": None, "mergemining": ""}
-# Quai from K1Pool (real answer in data/k1pool_quai_stats.json): 2.2574 QUAI/TH x 0.01026545 USD x (1 - 2 %).
-QUAI_K1POOL_PROFIT = 0.02271
+# Quai from K1Pool (real answer in data/k1pool_quai_stats.json), standard formula:
+# 10.9484 QUAI x 86400 s x 1e12 / networkDiff = 4.2078 QUAI per TH/s per day, x 0.01026545 USD x (1 - 2 %).
+QUAI_K1POOL_GAIN = 4.2078
+QUAI_K1POOL_PROFIT = 0.04233
 K1POOL_STATS = json.loads((Path(__file__).parent / "data" / "k1pool_quai_stats.json").read_text())
 QUAI = "sensor.k1pool_rentabilite_quai"
 # Latest USD price per coin. The real answer is a list of {timestamp, price} points, one per hour;
@@ -111,13 +113,17 @@ async def test_quai_gain_from_the_real_k1pool_answer(hass) -> None:
 
     gain = await _render(hass, sensor["value_template"], K1POOL_STATS)
 
-    # reward x blocks per day x 1 TH/s / network hashrate
-    assert float(gain) == pytest.approx(2.2574, rel=1e-3)
+    # reward x (1 TH/s x 86400 s) / network difficulty, computed here independently of the template
+    expected = K1POOL_STATS["coinReward"] * 86400 * 1e12 / K1POOL_STATS["networkDiff"]
+    assert float(gain) == pytest.approx(expected)
+    assert float(gain) == pytest.approx(QUAI_K1POOL_GAIN, rel=1e-3)
     assert sensor["json_attributes"] == ["coinPriceUsd", "coinPoolFee"]
     assert float(K1POOL_STATS["coinPriceUsd"]) == pytest.approx(0.01026545)  # text in the API
 
 
-@pytest.mark.parametrize("broken", [{}, {"coinBlocktime": 0}, {"networkSpeed": None}])
+@pytest.mark.parametrize(
+    "broken", [{}, {"networkDiff": 0}, {"networkDiff": None}, {"coinReward": None}]
+)
 async def test_a_broken_k1pool_answer_gives_an_unknown_sensor_not_an_error(hass, broken) -> None:
     (sensor,) = _rest("k1pool.com/api/stats/quaisha256")["sensor"]
     answer = {**K1POOL_STATS, **broken} if broken else {}
@@ -148,7 +154,7 @@ def _expected(coin: str) -> float:
 async def setup(hass: HomeAssistant, freezer):
     hass.states.async_set(
         "sensor.k1pool_gain_quai",
-        "2.2574",
+        str(QUAI_K1POOL_GAIN),
         {"coinPriceUsd": K1POOL_STATS["coinPriceUsd"], "coinPoolFee": K1POOL_STATS["coinPoolFee"]},
     )
     for slug, cid, _label in generator.COINS:
@@ -188,7 +194,7 @@ async def test_ranking_is_sorted_and_includes_quai_from_k1pool(hass, setup) -> N
     attrs = hass.states.get(BEST).attributes
 
     names = [line.split(" = ")[0] for line in attrs["classement"]]
-    assert names == ["BSV", "BTC", "DGB", "BCH", "QUAI", "FB", "XEC"]
+    assert names == ["BSV", "QUAI", "BTC", "DGB", "BCH", "FB", "XEC"]
     assert float(hass.states.get(QUAI).state) == pytest.approx(QUAI_K1POOL_PROFIT, abs=1e-5)
     assert attrs["indisponibles"] == []
 
@@ -203,16 +209,33 @@ async def test_quai_is_listed_as_unavailable_when_k1pool_has_no_data(hass, setup
     assert [line.split(" = ")[0] for line in attrs["classement"]] == ["BSV", "BTC", "DGB", "BCH", "FB", "XEC"]
 
 
-async def test_the_quai_correction_knob_moves_quai_in_the_ranking(hass, setup, freezer) -> None:
-    """The two pools disagree by x4.3 on Quai's block time: this knob is how to settle it."""
+@pytest.mark.parametrize(
+    ("factor", "winner", "quai_rank"),
+    [(1.5, "QUAI", 1), (0.8, "BSV", 3), (0.3, "BSV", 6)],
+)
+async def test_the_quai_correction_knob_moves_quai_in_the_ranking(
+    hass, setup, freezer, factor, winner, quai_rank
+) -> None:
+    """Real earnings higher or lower than the estimate: the knob fine-tunes the Quai figure."""
     await hass.services.async_call(
         "input_number", "set_value",
-        {"entity_id": "input_number.k1pool_quai_factor", "value": 4.3}, blocking=True,
+        {"entity_id": "input_number.k1pool_quai_factor", "value": factor}, blocking=True,
     )
     await _settle(hass, freezer)
 
-    assert hass.states.get(BEST).state == "QUAI"
-    assert hass.states.get(BEST).attributes["usd_th_jour"] == pytest.approx(4.3 * QUAI_K1POOL_PROFIT, abs=1e-4)
+    names = [line.split(" = ")[0] for line in hass.states.get(BEST).attributes["classement"]]
+    assert hass.states.get(BEST).state == winner
+    assert names.index("QUAI") + 1 == quai_rank
+
+
+def test_the_two_pools_agree_on_the_network_difficulty() -> None:
+    """Evidence for the formula: Kryptex's difficulty (diff1 units) x 2^32 is K1Pool's, in hashes.
+
+    Kryptex's `net_difficulty` of a day earlier: 49,974,597 (see its /net/stats/quai-sha256).
+    """
+    kryptex_hashes = 49_974_597 * 2**32
+
+    assert kryptex_hashes == pytest.approx(K1POOL_STATS["networkDiff"], rel=0.10)
 
 
 async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
@@ -222,9 +245,9 @@ async def test_the_leader_without_price_drops_out_and_the_next_one_takes_over(
     await _settle(hass, freezer)
 
     best = hass.states.get(BEST)
-    assert best.state == "BTC"
+    assert best.state == "QUAI"  # second in the ranking: 0.04233, ahead of BTC (0.04067)
     assert "BSV" in best.attributes["indisponibles"]
-    assert best.attributes["usd_th_jour"] == pytest.approx(_expected("btc"), rel=1e-4)
+    assert best.attributes["usd_th_jour"] == pytest.approx(QUAI_K1POOL_PROFIT, abs=1e-5)
 
 
 async def test_nothing_to_show_when_no_data_at_all(hass, setup, freezer) -> None:
@@ -248,10 +271,8 @@ async def test_the_dashboard_card_shows_the_winner_and_the_ranking(hass, setup) 
 
     assert "## BSV" in text
     assert "USD** par jour pour 1 TH/s" in text
-    assert [line for line in text.splitlines() if line.startswith("- ")][:2] == [
-        f"- BSV = {round(_expected('bsv'), 5)}",
-        f"- BTC = {round(_expected('btc'), 5)}",
-    ]
+    lines = [line for line in text.splitlines() if line.startswith("- ")]
+    assert [line[2:].split(" = ")[0] for line in lines][:3] == ["BSV", "QUAI", "BTC"]
     assert "- QUAI = " in text
     assert "Sans estimation" not in text
 
